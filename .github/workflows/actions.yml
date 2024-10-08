@@ -1,0 +1,42 @@
+name: actions-jobs
+
+on:
+  ## scheduled job at 5:30 UTC every sunday
+  ## schedule:
+  ##  - cron: '30 5 * * 0'
+  ## on push
+  ## push:
+  ##  branches: [ main ]
+  ## manual trigger
+  workflow_dispatch:
+
+permissions:
+      id-token: write
+      contents: read
+      security-events: write
+
+jobs:
+  crowdstrike-ecs-fargate-demo:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      
+    - name: Run FCS IaC Scan
+      uses: crowdstrike/fcs-action@v1.0.5
+      id: fcs
+      with:
+        falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
+        falcon_region: 'us-1'
+        path: '.'
+        report_formats: 'sarif'
+        output_path: './scan-results'
+      env:
+        FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+    
+    - name: Upload SARIF report to GitHub Code scanning
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: ./scan-results/*-scan-results.sarif
