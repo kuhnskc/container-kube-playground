@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: containerd-socket
+spec:
+  containers:
+  - name: ubuntu-containerd-socket
+    image: ubuntu:latest
+    # Just sleep forever
+    command: [ "sleep" ]
+    args: [ "infinity" ]
+    volumeMounts:
+    - mountPath: /run/containerd/containerd.sock
+      name: containerd-socket-volume
+
+  volumes:
+    - name: containerd-socket-volume
+      hostPath:
+        path: /run/containerd/containerd.sock
+        type: File
