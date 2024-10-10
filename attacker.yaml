@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cs-pov-attacker
+  labels:
+    app.kubernetes.io/name: cs-pov-attacker
+    app.kubernetes.io/part-of: crowdstrike-demo
+    app.kubernetes.io/created-by: crowdstrike
+spec:
+  selector:
+    matchLabels:
+      run: cs-pov-attacker
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        run: cs-pov-attacker
+        app.kubernetes.io/name: cs-pov-attacker
+        app.kubernetes.io/part-of: crowdstrike-demo
+        app.kubernetes.io/created-by: crowdstrike
+      annotations:
+        sensor.falcon-system.crowdstrike.com/injection: disabled
+    spec:
+      containers:
+        - name: app
+          image: ubuntu:latest
+          imagePullPolicy: Always
+          # Just spin & wait forever
+          command: [ "/bin/bash", "-c", "--" ]
+          args: [ "while true; do sleep 30; done;" ]
+          ports:
+            - containerPort: 80
+              name: payloaddelivery
+            - containerPort: 4444
+              name: c2
+            - containerPort: 5555
+              name: filetransfer
