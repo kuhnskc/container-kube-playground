@@ -4,7 +4,6 @@ metadata:
   labels:
     app: containerd-socket
     owner: TomRyan
-    email: tom.ryan@crowdstrike.com
   name: containerd-socket
 spec:
   replicas: 1
