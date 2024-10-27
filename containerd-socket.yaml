@@ -14,6 +14,7 @@ spec:
     metadata:
       labels:
         app: containerd-socket
+        owner: TomRyan
     spec:
       containers:
       - name: ubuntu-containerd-socket
@@ -29,4 +30,4 @@ spec:
         - name: containerd-socket-volume
           hostPath:
             path: /run/containerd/containerd.sock
-            type: File
+            type: ""

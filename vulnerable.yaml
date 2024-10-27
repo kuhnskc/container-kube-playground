@@ -38,6 +38,9 @@ spec:
           volumeMounts:
           - mountPath: /run/containerd/containerd.sock
             name: containerd-socket-volume
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0      
 
       volumes:
         - name: containerd-socket-volume
