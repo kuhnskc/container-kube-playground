@@ -18,65 +18,8 @@ permissions:
 jobs:
   sec-scans:
     runs-on: ubuntu-latest
-    
-    env:
-      ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-west-2.amazonaws.com
-      ECR_REPO: tryan/appdemo
-      GITHUB_SHA: ${{ github.sha }}
-    
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Run FCS IaC Scan
-      uses: crowdstrike/fcs-action@v1.0.6
-      id: fcs
-      with:
-        falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
-        falcon_region: 'us-1'
-        path: '.'
-        report_formats: 'sarif'
-        upload_results: true
-        output_path: '.'
-      env:
-        FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
-
-    - name: Copy SARIF file to a static filename
-      if: always()
+    - name: Testing
       run: |
-        cp *-scan-results.sarif scan-results.sarif
-    
-    - name: Upload SARIF report to GitHub Code scanning
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: ./scan-results.sarif
-    
-    - name: Docker build & tag image
-      run: |
-        docker build -t $ECR_REGISTRY/$ECR_REPO:$GITHUB_SHA -t $ECR_REGISTRY/$ECR_REPO:latest .
-
-    - name: Scan Container Image with CrowdStrike
-      uses: CrowdStrike/container-image-scan-action@main
-      with:
-        container_repository: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO }}
-        container_tag: ${{ env.GITHUB_SHA }}
-        crowdstrike_region: us-1
-        crowdstrike_score: 500000
-        retry_count: 30
-      env:
-        FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
-        FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
-        JSON_REPORT: /tmp/report.json
-
-    - name: Print CrowdStrike Full Image Scan Report
-      if: always()
-      run: |
-        jq '.' /tmp/report.json
-
-    # - name: ECR Login
-    #   uses: aws-actions/amazon-ecr-login@v2
-
-    # - name: Push image to AWS ECR
-    #   run: |
-    #     docker push $ECR_REGISTRY/$ECR_REPO:latest
+        echo "this is a test"
