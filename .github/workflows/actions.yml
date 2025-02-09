@@ -67,7 +67,7 @@ jobs:
 
         curl \
         --header "Authorization: Bearer ${CS_JWT}" \
-        --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:&tag=${{ env.ECR_TAG }}"
+        --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
 
 #scan image using CrowdStrike managed Action
     # - name: Scan Container Image with CrowdStrike
