@@ -6,7 +6,7 @@ env:
   FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
   FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
   JSON_REPORT: /tmp/report.json
-  CONTAINER_HOST: unix:///run/user/1000/podman/podman.sock
+  # CONTAINER_HOST: unix:///run/user/1000/podman/podman.sock
   
 jobs:
   sec-scans:
@@ -40,6 +40,7 @@ jobs:
     #   with:
     #     sarif_file: ./scan-results.sarif
 
+#build the image and push it to the CrowdStrike image assessment service
     - name: Podman build tag and push
       run: |
         podman build -t kckuhns:demo .
@@ -52,39 +53,34 @@ jobs:
       
         podman tag kckuhns:demo container-upload.us-1.crowdstrike.com/kckuhns:demo
         podman push container-upload.us-1.crowdstrike.com/kckuhns:demo
-        podman machine init
-        podman machine start
 
-    # - name: Retreive vulnerability report
-    #   run: |
-    #     RESPONSE=$(curl \
-    #     --header "Content-Type: application/x-www-form-urlencoded" \
-    #     --data "client_id=${FALCON_CLIENT_ID}&client_secret=${FALCON_CLIENT_SECRET}" \
-    #     --request POST \
-    #     --silent https://api.crowdstrike.com/oauth2/token) 
-
-    #     CS_JWT=$(echo ${RESPONSE} | jq -r '.access_token')
-
-    #     curl \
-    #     --header "Authorization: Bearer ${CS_JWT}" \
-    #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=kckuhns&tag=demo"
-
-    # - name: Find Podman socket path and set as variable for Python script
-    #   run: |
-    #     echo "CONTAINER_HOST=$(podman info --format '{{.Host.RemoteSocket.Path}}')" >> $GITHUB_ENV
-
-    - name: Scan Container Image with CrowdStrike
-      uses: CrowdStrike/container-image-scan-action@main
-      with:
-        container_repository: kckuhns
-        container_tag: demo
-        crowdstrike_region: us-1
-        crowdstrike_score: 500000
-        retry_count: 30
-      env:
-        JSON_REPORT: /tmp/report.json
-
-    - name: Print CrowdStrike Full Image Scan Report
-      if: always()
+    - name: Retreive vulnerability report
       run: |
-        jq '.' /tmp/report.json
+        RESPONSE=$(curl \
+        --header "Content-Type: application/x-www-form-urlencoded" \
+        --data "client_id=${FALCON_CLIENT_ID}&client_secret=${FALCON_CLIENT_SECRET}" \
+        --request POST \
+        --silent https://api.crowdstrike.com/oauth2/token) 
+
+        CS_JWT=$(echo ${RESPONSE} | jq -r '.access_token')
+
+        curl \
+        --header "Authorization: Bearer ${CS_JWT}" \
+        --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=kckuhns&tag=demo"
+
+#scan image using CrowdStrike managed Action
+    # - name: Scan Container Image with CrowdStrike
+    #   uses: CrowdStrike/container-image-scan-action@main
+    #   with:
+    #     container_repository: kckuhns
+    #     container_tag: demo
+    #     crowdstrike_region: us-1
+    #     crowdstrike_score: 500000
+    #     retry_count: 30
+    #   env:
+    #     JSON_REPORT: /tmp/report.json
+
+    # - name: Print CrowdStrike Full Image Scan Report
+    #   if: always()
+    #   run: |
+    #     jq '.' /tmp/report.json
