@@ -1,25 +1,57 @@
 name: actions-jobs
 
-on:
-  ## scheduled job at 5:30 UTC every sunday
-  # schedule:
-  #  - cron: '30 5 * * 0'
-  # on push
-  push:
-    branches: [ main ]
-  # manual trigger
-  workflow_dispatch:
-
-permissions:
-      id-token: write
-      contents: read
-      security-events: write
+on: workflow_dispatch
 
 jobs:
   sec-scans:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Testing
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Run FCS IaC Scan
+      uses: crowdstrike/fcs-action@v1.0.6
+      id: fcs
+      with:
+        falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
+        falcon_region: 'us-1'
+        path: '.'
+        report_formats: 'sarif'
+        upload_results: true
+        output_path: '.'
+      env:
+        FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+
+    - name: Copy SARIF file to a static filename
+      if: always()
       run: |
-        echo "this is a test"
+        cp *-scan-results.sarif scan-results.sarif
+    
+    - name: Upload SARIF report to GitHub Code scanning
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: ./scan-results.sarif
+
+    - name: Podman build and tag
+      run: |
+        podman build -t kckuhns:demo .
+
+    - name: Scan Container Image with CrowdStrike
+      uses: CrowdStrike/container-image-scan-action@main
+      with:
+        container_repository: kckuhns
+        container_tag: demo
+        crowdstrike_region: us-1
+        crowdstrike_score: 500000
+        retry_count: 30
+      env:
+        FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+        FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+        JSON_REPORT: /tmp/report.json
+
+    - name: Print CrowdStrike Full Image Scan Report
+      if: always()
+      run: |
+        jq '.' /tmp/report.json
