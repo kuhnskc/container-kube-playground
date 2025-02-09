@@ -52,6 +52,8 @@ jobs:
       
         podman tag kckuhns:demo container-upload.us-1.crowdstrike.com/kckuhns:demo
         podman push container-upload.us-1.crowdstrike.com/kckuhns:demo
+        podman machine init
+        podman machine start
 
     # - name: Retreive vulnerability report
     #   run: |
