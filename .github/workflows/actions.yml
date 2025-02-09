@@ -51,7 +51,10 @@ jobs:
       
         podman tag kckuhns:demo container-upload.us-1.crowdstrike.com/kckuhns:demo
         podman push container-upload.us-1.crowdstrike.com/kckuhns:demo
+        echo "Check the Python packages installed..."
+        pip list
 
+#example of manually retreiving the vulnerability report
     - name: Retreive vulnerability report
       run: |
         RESPONSE=$(curl \
