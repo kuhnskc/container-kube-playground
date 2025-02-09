@@ -35,23 +35,48 @@ jobs:
     #     sarif_file: ./scan-results.sarif
 
     - name: Podman build and tag
-      run: |
-        podman build -t kckuhns:demo .
-
-    - name: Scan Container Image with CrowdStrike
-      uses: CrowdStrike/container-image-scan-action@main
-      with:
-        container_repository: kckuhns
-        container_tag: demo
-        crowdstrike_region: us-1
-        crowdstrike_score: 500000
-        retry_count: 30
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
         FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
         JSON_REPORT: /tmp/report.json
+        run: |
+          podman build -t kckuhns:demo .
+          podman image ls
 
-    - name: Print CrowdStrike Full Image Scan Report
-      if: always()
-      run: |
-        jq '.' /tmp/report.json
+          podman login \
+          --username ${FALCON_CLIENT_ID} \
+          --password ${FALCON_CLIENT_SECRET} \
+          container-upload.us-1.crowdstrike.com
+        
+          podman tag kckuhns:demo container-upload.us-1.crowdstrike.com/kckuhns:demo
+          podman push container-upload.us-1.crowdstrike.com/kckuhns:demo
+  
+          RESPONSE=$(curl \
+          --header "Content-Type: application/x-www-form-urlencoded" \
+          --data "client_id=${FALCON_CLIENT_ID}&client_secret=${FALCON_CLIENT_SECRET}" \
+          --request POST \
+          --silent ${API_BASE_URL}/oauth2/token) 
+  
+          CS_JWT=$(echo ${RESPONSE} | jq -r '.access_token')
+  
+          curl \
+          --header "Authorization: Bearer ${CS_JWT}" \
+          --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=kckuhns&tag=demo"
+
+    # - name: Scan Container Image with CrowdStrike
+    #   uses: CrowdStrike/container-image-scan-action@main
+    #   with:
+    #     container_repository: kckuhns
+    #     container_tag: demo
+    #     crowdstrike_region: us-1
+    #     crowdstrike_score: 500000
+    #     retry_count: 30
+    #   env:
+    #     FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+    #     FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+    #     JSON_REPORT: /tmp/report.json
+
+    # - name: Print CrowdStrike Full Image Scan Report
+    #   if: always()
+    #   run: |
+    #     jq '.' /tmp/report.json
