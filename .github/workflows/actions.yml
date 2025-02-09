@@ -17,41 +17,41 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    # - name: Run FCS IaC Scan
-    #   uses: crowdstrike/fcs-action@v1.0.6
-    #   id: fcs
-    #   with:
-    #     falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
-    #     falcon_region: 'us-1'
-    #     path: '.'
-    #     report_formats: 'sarif'
-    #     upload_results: true
-    #     output_path: '.'
-    #   env:
-    #     FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+    - name: Run FCS IaC Scan
+      uses: crowdstrike/fcs-action@v1.0.6
+      id: fcs
+      with:
+        falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
+        falcon_region: 'us-1'
+        path: '.'
+        report_formats: 'sarif'
+        upload_results: true
+        output_path: '.'
+      env:
+        FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
-    # - name: Copy SARIF file to a static filename
-    #   if: always()
-    #   run: |
-    #     cp *-scan-results.sarif scan-results.sarif
+    - name: Copy SARIF file to a static filename
+      if: always()
+      run: |
+        cp *-scan-results.sarif scan-results.sarif
     
-    # - name: Upload SARIF report to GitHub Code scanning
-    #   uses: github/codeql-action/upload-sarif@v3
-    #   if: always()
-    #   with:
-    #     sarif_file: ./scan-results.sarif
+    - name: Upload SARIF report to GitHub Code scanning
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: ./scan-results.sarif
 
-#build the image and push it to the CrowdStrike image assessment service
-    - name: Podman build tag and push
+    - name: Podman build
       run: |
         podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
 
-        
+    - name: Tag and push the image to CrowdStrike image assessment service
+      run: |    
         podman login \
         --username ${FALCON_CLIENT_ID} \
         --password ${FALCON_CLIENT_SECRET} \
         container-upload.us-1.crowdstrike.com
-      
+        
         podman tag ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
         podman push container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
 
