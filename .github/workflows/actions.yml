@@ -67,7 +67,7 @@ jobs:
 #         --header "Authorization: Bearer ${CS_JWT}" \
 #         --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=kckuhns&tag=demo"
     - name: Set podman socket path
-      run: podman info --format '{{.Host.RemoteSocket.Path}} >> $CONTAINER_HOST
+      run: echo "podman info --format '{{.Host.RemoteSocket.Path}}" >> $CONTAINER_HOST
     - name: Scan Container Image with CrowdStrike
       uses: CrowdStrike/container-image-scan-action@main
       with:
