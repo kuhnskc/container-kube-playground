@@ -6,6 +6,7 @@ env:
   FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
   FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
   JSON_REPORT: /tmp/report.json
+  CONTAINER_HOST: /run/user/1000/podman/podman.sock
   
 jobs:
   sec-scans:
@@ -66,9 +67,9 @@ jobs:
     #     --header "Authorization: Bearer ${CS_JWT}" \
     #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=kckuhns&tag=demo"
 
-    - name: Find Podman socket path and set as variable for Python script
-      run: |
-        echo "CONTAINER_HOST=$(podman info --format '{{.Host.RemoteSocket.Path}}')" >> $GITHUB_ENV
+    # - name: Find Podman socket path and set as variable for Python script
+    #   run: |
+    #     echo "CONTAINER_HOST=$(podman info --format '{{.Host.RemoteSocket.Path}}')" >> $GITHUB_ENV
 
     - name: Scan Container Image with CrowdStrike
       uses: CrowdStrike/container-image-scan-action@main
@@ -80,7 +81,6 @@ jobs:
         retry_count: 30
       env:
         JSON_REPORT: /tmp/report.json
-        CONTAINER_HOST: ${{ env.CONTAINER_HOST }}
 
     - name: Print CrowdStrike Full Image Scan Report
       if: always()
