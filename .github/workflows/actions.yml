@@ -4,7 +4,9 @@ on: workflow_dispatch
 
 env:
   FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
-  FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}  
+  FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }} 
+  ECR_REPO: kkuhns
+  ECR_TAG: demo
   # CONTAINER_HOST: unix:///run/user/1000/podman/podman.sock
   
 jobs:
@@ -42,16 +44,16 @@ jobs:
 #build the image and push it to the CrowdStrike image assessment service
     - name: Podman build tag and push
       run: |
-        podman build -t kckuhns:demo .
-        podman image ls
+        podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REGISTRY }}:${{ env.ECR_TAG }} .
 
+        
         podman login \
         --username ${FALCON_CLIENT_ID} \
         --password ${FALCON_CLIENT_SECRET} \
         container-upload.us-1.crowdstrike.com
       
-        podman tag kckuhns:demo container-upload.us-1.crowdstrike.com/kckuhns:demo
-        podman push container-upload.us-1.crowdstrike.com/kckuhns:demo
+        podman tag ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REGISTRY }}:${{ env.ECR_TAG }} container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REGISTRY }}:${{ env.ECR_TAG }}
+        podman push container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REGISTRY }}:${{ env.ECR_TAG }}
 
     - name: Retreive vulnerability report
       run: |
@@ -65,14 +67,14 @@ jobs:
 
         curl \
         --header "Authorization: Bearer ${CS_JWT}" \
-        --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=kckuhns&tag=demo"
+        --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REGISTRY }}:&tag=${{ env.ECR_TAG }}"
 
 #scan image using CrowdStrike managed Action
     # - name: Scan Container Image with CrowdStrike
     #   uses: CrowdStrike/container-image-scan-action@main
     #   with:
-    #     container_repository: kckuhns
-    #     container_tag: demo
+    #     container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REGISTRY }}
+    #     container_tag: ${{ env.ECR_TAG }}
     #     crowdstrike_region: us-1
     #     crowdstrike_score: 500000
     #     retry_count: 30
