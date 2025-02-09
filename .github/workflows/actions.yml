@@ -67,7 +67,9 @@ jobs:
     #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=kckuhns&tag=demo"
 
     - name: Set podman socket path
-      run: podman info >> podman.json | jq '.'
+      run: |
+        podman info >> podman.json
+        cat podman.json
       
 
     # - name: Scan Container Image with CrowdStrike
