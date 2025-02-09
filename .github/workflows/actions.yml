@@ -51,7 +51,6 @@ jobs:
       
         podman tag kckuhns:demo container-upload.us-1.crowdstrike.com/kckuhns:demo
         podman push container-upload.us-1.crowdstrike.com/kckuhns:demo
-        podman info | grep "Unix socket path"
 
 # #example of manually retreiving the vulnerability report
 #     - name: Retreive vulnerability report
@@ -67,7 +66,8 @@ jobs:
 #         curl \
 #         --header "Authorization: Bearer ${CS_JWT}" \
 #         --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=kckuhns&tag=demo"
-
+    - name: Set podman socket path
+      run: podman info --format '{{.Host.RemoteSocket.Path}} >> $CONTAINER_HOST
     - name: Scan Container Image with CrowdStrike
       uses: CrowdStrike/container-image-scan-action@main
       with:
