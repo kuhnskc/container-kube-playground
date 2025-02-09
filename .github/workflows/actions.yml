@@ -2,6 +2,11 @@ name: actions-jobs
 
 on: workflow_dispatch
 
+env:
+  FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+  FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+  JSON_REPORT: /tmp/report.json
+  
 jobs:
   sec-scans:
     runs-on: ubuntu-latest
@@ -34,11 +39,7 @@ jobs:
     #   with:
     #     sarif_file: ./scan-results.sarif
 
-    - name: Podman build and tag
-      env:
-        FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
-        FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
-        JSON_REPORT: /tmp/report.json
+    - name: Podman build tag and push
       run: |
         podman build -t kckuhns:demo .
         podman image ls
@@ -51,6 +52,8 @@ jobs:
         podman tag kckuhns:demo container-upload.us-1.crowdstrike.com/kckuhns:demo
         podman push container-upload.us-1.crowdstrike.com/kckuhns:demo
 
+    - name: Retreive vulnerability report
+      run: |
         RESPONSE=$(curl \
         --header "Content-Type: application/x-www-form-urlencoded" \
         --data "client_id=${FALCON_CLIENT_ID}&client_secret=${FALCON_CLIENT_SECRET}" \
