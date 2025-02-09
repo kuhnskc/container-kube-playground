@@ -68,9 +68,8 @@ jobs:
 
     - name: Set podman socket path
       run: |
-        podman info >> podman.json
-        cat podman.json
-      
+        echo "CONTAINER_HOST=$(podman info --format '{{.Host.RemoteSocket.Path}}')" >> $GITHUB_ENV
+        echo $CONTAINER_HOST
 
     # - name: Scan Container Image with CrowdStrike
     #   uses: CrowdStrike/container-image-scan-action@main
