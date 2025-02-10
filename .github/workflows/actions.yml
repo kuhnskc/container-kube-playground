@@ -43,8 +43,6 @@ jobs:
 
     - name: Podman build
       run: |
-        systemctl --user enable --now podman.socket
-        systemctl --user status podman.socket
         podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
 
     - name: Tag and push the image to CrowdStrike image assessment service
