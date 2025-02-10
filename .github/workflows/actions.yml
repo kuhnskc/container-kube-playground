@@ -7,7 +7,7 @@ env:
   FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }} 
   ECR_REPO: kkuhns
   ECR_TAG: demo
-  CONTAINER_HOST: unix:///run/podman/podman.sock
+  # CONTAINER_HOST: unix:///run/podman/podman.sock
 
 jobs:
   sec-scans:
@@ -43,12 +43,8 @@ jobs:
 
     - name: Podman build
       run: |
-        podman machine list
-        podman machine stop
-        podman machine rm podman-machine-default
-        podman machine init
-        podman machine start
-        systemctl status podman.socket
+        systemctl --user enable --now podman.socket
+        systemctl --user status podman.socket
         podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
 
     # - name: Tag and push the image to CrowdStrike image assessment service
