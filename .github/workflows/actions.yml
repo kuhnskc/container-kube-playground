@@ -86,6 +86,7 @@ jobs:
     #     jq '.' /tmp/report.json
 
     - name: Scan images via CrowdStrike script
+      if: always()  
       run: |
         wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
         systemctl --user enable --now podman.socket   
