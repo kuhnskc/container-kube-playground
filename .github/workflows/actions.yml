@@ -91,8 +91,8 @@ jobs:
         FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }} 
       run: |
         wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
-        chmod +x cs_scanimage.py
+        systemctl --user enable --now podman.sock        
         pip3 install podman crowdstrike-falconpy retry
         # export CONTAINER_HOST="unix:///run/user/1001/podman/podman.sock"
-        python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1 --json-report ~./tmp/crowdstrike-vuln-report.json
+        python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --log-level DEBUG --tag ${{ env.ECR_TAG }} --cloud-region us-1 --json-report ~./tmp/crowdstrike-vuln-report.json
         jq '.' ~./tmp/crowdstrike-vuln-report.json
