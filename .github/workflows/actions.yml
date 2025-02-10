@@ -79,7 +79,6 @@ jobs:
     #     retry_count: 30
     #   env:
     #     JSON_REPORT: /tmp/report.json
-    #     CONTAINER_HOST: unix:///run/user/1001/podman/podman.sock
 
     # - name: Print CrowdStrike Full Image Scan Report
     #   if: always()
