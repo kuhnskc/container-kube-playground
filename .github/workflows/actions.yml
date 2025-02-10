@@ -71,19 +71,26 @@ jobs:
     #     --header "Authorization: Bearer ${CS_JWT}" \
     #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
 
-    - name: Scan Container Image with CrowdStrike
-      uses: CrowdStrike/container-image-scan-action@main
-      with:
-        container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
-        container_tag: ${{ env.ECR_TAG }}
-        crowdstrike_region: us-1
-        crowdstrike_score: 500000
-        retry_count: 30
-      env:
-        JSON_REPORT: /tmp/report.json
-        CONTAINER_HOST: unix:///run/user/1001/podman/podman.sock
+    # - name: Scan Container Image with CrowdStrike
+    #   uses: CrowdStrike/container-image-scan-action@main
+    #   with:
+    #     container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
+    #     container_tag: ${{ env.ECR_TAG }}
+    #     crowdstrike_region: us-1
+    #     crowdstrike_score: 500000
+    #     retry_count: 30
+    #   env:
+    #     JSON_REPORT: /tmp/report.json
+    #     CONTAINER_HOST: unix:///run/user/1001/podman/podman.sock
 
-    - name: Print CrowdStrike Full Image Scan Report
-      if: always()
+    # - name: Print CrowdStrike Full Image Scan Report
+    #   if: always()
+    #   run: |
+    #     jq '.' /tmp/report.json
+
+    - name: Scan images via CrowdStrike script
       run: |
-        jq '.' /tmp/report.json
+        wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
+        chmod +x cs_scanimage.py
+        export CONTAINER_HOST="unix:///run/user/1001/podman/podman.sock"
+        python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1
