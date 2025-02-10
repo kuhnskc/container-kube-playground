@@ -7,8 +7,8 @@ env:
   FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }} 
   ECR_REPO: kkuhns
   ECR_TAG: demo
+  CONTAINER_HOST: unix:///run/podman/podman.sock
 
-  
 jobs:
   sec-scans:
     runs-on: ubuntu-latest
@@ -43,6 +43,7 @@ jobs:
 
     - name: Podman build
       run: |
+        systemctl status podman.socket
         podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
 
     # - name: Tag and push the image to CrowdStrike image assessment service
@@ -69,12 +70,6 @@ jobs:
     #     --header "Authorization: Bearer ${CS_JWT}" \
     #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
 
-    - name: Start Podman socket
-      if: always()
-      run: |
-        systemctl --user start podman.socket
-        systemctl status podman.socket
-
     - name: Scan Container Image with CrowdStrike
       uses: CrowdStrike/container-image-scan-action@main
       with:
@@ -85,7 +80,7 @@ jobs:
         retry_count: 30
       env:
         JSON_REPORT: /tmp/report.json
-        CONTAINER_HOST: unix:///run/podman/podman.sock
+        # CONTAINER_HOST: unix:///run/podman/podman.sock
 
     - name: Print CrowdStrike Full Image Scan Report
       if: always()
