@@ -73,6 +73,7 @@ jobs:
       if: always()
       run: |
         systemctl --user start podman.socket
+        systemctl status podman.socket
 
     - name: Scan Container Image with CrowdStrike
       uses: CrowdStrike/container-image-scan-action@main
