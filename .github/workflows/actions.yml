@@ -69,9 +69,10 @@ jobs:
     #     --header "Authorization: Bearer ${CS_JWT}" \
     #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
 
-    - name: Retreive vulnerability report
+    - name: Start Podman socket
+      if: always()
       run: |
-        podman system service -t 0 unix:///run/user/1000/podman/podman.sock
+        systemctl --user start podman.socket
 
     - name: Scan Container Image with CrowdStrike
       uses: CrowdStrike/container-image-scan-action@main
