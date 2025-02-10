@@ -90,5 +90,5 @@ jobs:
         wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
         systemctl --user enable --now podman.socket       
         pip3 install podman crowdstrike-falconpy retry
-        python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --log-level DEBUG --tag ${{ env.ECR_TAG }} --cloud-region us-1 --json-report crowdstrike-vuln-report.json
-        jq '.' crowdstrike-vuln-report.json
+        python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1 --log-level DEBUG --json-report ~/tmp/crowdstrike-vuln-report.json
+        jq '.' ~/tmp/crowdstrike-vuln-report.json
