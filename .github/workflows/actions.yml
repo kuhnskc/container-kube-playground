@@ -92,5 +92,6 @@ jobs:
       run: |
         wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
         chmod +x cs_scanimage.py
+        pip3 install podman crowdstrike-falconpy
         export CONTAINER_HOST="unix:///run/user/1001/podman/podman.sock"
         python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1
