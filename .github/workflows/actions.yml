@@ -43,6 +43,11 @@ jobs:
 
     - name: Podman build
       run: |
+        podman machine list
+        podman machine stop
+        podman machine rm podman-machine-default
+        podman machine init
+        podman machine start
         systemctl status podman.socket
         podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
 
