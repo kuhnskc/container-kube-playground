@@ -7,7 +7,7 @@ env:
   FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }} 
   ECR_REPO: kkuhns
   ECR_TAG: demo
-  CONTAINER_HOST: unix:///run/user/1000/podman/podman.sock
+
   
 jobs:
   sec-scans:
@@ -85,6 +85,7 @@ jobs:
         retry_count: 30
       env:
         JSON_REPORT: /tmp/report.json
+        CONTAINER_HOST: unix:///run/podman/podman.sock
 
     - name: Print CrowdStrike Full Image Scan Report
       if: always()
