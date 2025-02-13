@@ -84,6 +84,7 @@ jobs:
         JSON_REPORT: /tmp/report.json
 
     - name: Print CrowdStrike Full Image Scan Report
+      continue-on-error: true
       if: always()
       run: |
         jq '.' /tmp/report.json
