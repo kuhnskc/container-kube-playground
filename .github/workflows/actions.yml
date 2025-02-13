@@ -7,7 +7,6 @@ env:
   FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }} 
   ECR_REPO: kkuhns
   ECR_TAG: demo
-  # CONTAINER_HOST: unix:///run/podman/podman.sock
 
 jobs:
   sec-scans:
@@ -68,22 +67,25 @@ jobs:
     #     curl \
     #     --header "Authorization: Bearer ${CS_JWT}" \
     #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
+    - name: Start the Podman socket for the Action
+      run: |
+        systemctl --user enable --now podman.socket   
 
-    # - name: Scan Container Image with CrowdStrike action
-    #   uses: CrowdStrike/container-image-scan-action@main
-    #   with:
-    #     container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
-    #     container_tag: ${{ env.ECR_TAG }}
-    #     crowdstrike_region: us-1
-    #     crowdstrike_score: 500000
-    #     retry_count: 30
-    #   env:
-    #     JSON_REPORT: /tmp/report.json
+    - name: Scan Container Image with CrowdStrike action
+      uses: CrowdStrike/container-image-scan-action@main
+      with:
+        container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
+        container_tag: ${{ env.ECR_TAG }}
+        crowdstrike_region: us-1
+        crowdstrike_score: 500000
+        retry_count: 30
+      env:
+        JSON_REPORT: /tmp/report.json
 
-    # - name: Print CrowdStrike Full Image Scan Report
-    #   if: always()
-    #   run: |
-    #     jq '.' /tmp/report.json
+    - name: Print CrowdStrike Full Image Scan Report
+      if: always()
+      run: |
+        jq '.' /tmp/report.json
 
     - name: Scan images via CrowdStrike script
       continue-on-error: true
@@ -91,5 +93,5 @@ jobs:
         wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
         systemctl --user enable --now podman.socket   
         pip3 install podman crowdstrike-falconpy retry
-        python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1 --log-level DEBUG --json-report crwd-vuln-report.json
-        jq '.' crwd-vuln-report.json
+        python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1 --log-level DEBUG --json-report /tmp/report.json
+        jq '.' /tmp/report.json
