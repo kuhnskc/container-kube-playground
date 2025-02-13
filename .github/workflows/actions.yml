@@ -77,23 +77,23 @@ jobs:
 # navigate to the action directly to read more details
 #**************************************************************************************************************
 
-    # - name: Scan Container Image with CrowdStrike action          
-    #   continue-on-error: true
-    #   uses: CrowdStrike/container-image-scan-action@main
-    #   with:
-    #     container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
-    #     container_tag: ${{ env.ECR_TAG }}
-    #     crowdstrike_region: us-1
-    #     crowdstrike_score: 500000
-    #     retry_count: 30
-    #   env:
-    #     JSON_REPORT: /tmp/report.json
+    - name: Scan Container Image with CrowdStrike action          
+      continue-on-error: true
+      uses: CrowdStrike/container-image-scan-action@main
+      with:
+        container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
+        container_tag: ${{ env.ECR_TAG }}
+        crowdstrike_region: us-1
+        crowdstrike_score: 500000
+        retry_count: 30
+      env:
+        JSON_REPORT: /tmp/report.json
 
-    # - name: Print CrowdStrike Full Image Scan Report
-    #   continue-on-error: true
-    #   if: always()
-    #   run: |
-    #     jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
+    - name: Print CrowdStrike Full Image Scan Report
+      continue-on-error: true
+      if: always()
+      run: |
+        jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
 
 #**************************************************************************************************************
 # the following section demonstrates how to use the python script to assess images
@@ -102,13 +102,13 @@ jobs:
 # using the action is the recommended approach
 #**************************************************************************************************************
 
-    - name: Scan images via CrowdStrike script
-      continue-on-error: true
-      run: |
-        wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
-        pip3 install podman crowdstrike-falconpy retry
-        python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1 --log-level DEBUG --json-report /tmp/report.json
-        jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
+    # - name: Scan images via CrowdStrike script
+    #   continue-on-error: true
+    #   run: |
+    #     wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
+    #     pip3 install podman crowdstrike-falconpy retry
+    #     python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1 --log-level DEBUG --json-report /tmp/report.json
+    #     jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
 
 # **************************************************************************************************************
 # the following section demonstrates how to manually upload images
