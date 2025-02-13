@@ -76,23 +76,23 @@ jobs:
 # navigate to the action directly to read more details
 #**************************************************************************************************************
 
-    - name: Scan Container Image with CrowdStrike action          
-      continue-on-error: true
-      uses: CrowdStrike/container-image-scan-action@main
-      with:
-        container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
-        container_tag: ${{ env.ECR_TAG }}
-        crowdstrike_region: us-1
-        crowdstrike_score: 500000
-        retry_count: 30
-      env:
-        JSON_REPORT: /tmp/report.json
+    # - name: Scan Container Image with CrowdStrike action          
+    #   continue-on-error: true
+    #   uses: CrowdStrike/container-image-scan-action@main
+    #   with:
+    #     container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
+    #     container_tag: ${{ env.ECR_TAG }}
+    #     crowdstrike_region: us-1
+    #     crowdstrike_score: 500000
+    #     retry_count: 30
+    #   env:
+    #     JSON_REPORT: /tmp/report.json
 
-    - name: Print CrowdStrike Full Image Scan Report
-      continue-on-error: true
-      if: always()
-      run: |
-        jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
+    # - name: Print CrowdStrike Full Image Scan Report
+    #   continue-on-error: true
+    #   if: always()
+    #   run: |
+    #     jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
 
 #**************************************************************************************************************
 # the following section demonstrates how to use the python script to assess images
@@ -117,26 +117,26 @@ jobs:
 # using the action is the recommended approach
 # **************************************************************************************************************
 
-    - name: Tag and push the image to CrowdStrike image assessment service
-      run: |    
-        podman login \
-        --username ${FALCON_CLIENT_ID} \
-        --password ${FALCON_CLIENT_SECRET} \
-        container-upload.us-1.crowdstrike.com
+    # - name: Tag and push the image to CrowdStrike image assessment service
+    #   run: |    
+    #     podman login \
+    #     --username ${FALCON_CLIENT_ID} \
+    #     --password ${FALCON_CLIENT_SECRET} \
+    #     container-upload.us-1.crowdstrike.com
 
-        podman tag ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
-        podman push container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
+    #     podman tag ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
+    #     podman push container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
 
-    - name: Retreive vulnerability report
-      run: |
-        RESPONSE=$(curl \
-        --header "Content-Type: application/x-www-form-urlencoded" \
-        --data "client_id=${FALCON_CLIENT_ID}&client_secret=${FALCON_CLIENT_SECRET}" \
-        --request POST \
-        --silent https://api.crowdstrike.com/oauth2/token) 
+    # - name: Retreive vulnerability report
+    #   run: |
+    #     RESPONSE=$(curl \
+    #     --header "Content-Type: application/x-www-form-urlencoded" \
+    #     --data "client_id=${FALCON_CLIENT_ID}&client_secret=${FALCON_CLIENT_SECRET}" \
+    #     --request POST \
+    #     --silent https://api.crowdstrike.com/oauth2/token) 
 
-        CS_JWT=$(echo ${RESPONSE} | jq -r '.access_token')
+    #     CS_JWT=$(echo ${RESPONSE} | jq -r '.access_token')
 
-        curl \
-        --header "Authorization: Bearer ${CS_JWT}" \
-        --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
+    #     curl \
+    #     --header "Authorization: Bearer ${CS_JWT}" \
+    #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
