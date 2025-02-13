@@ -70,7 +70,6 @@ jobs:
     - name: Podman build
       run: |
         podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
-        systemctl --user enable --now podman.socket
 
 #**************************************************************************************************************
 # the following section demonstrates how to use the crowdstrike action to assess images
@@ -105,6 +104,7 @@ jobs:
     - name: Scan images via CrowdStrike script
       continue-on-error: true
       run: |
+        systemctl --user enable --now podman.socket
         wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
         pip3 install podman crowdstrike-falconpy retry
         python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1 --log-level DEBUG --json-report /tmp/report.json
