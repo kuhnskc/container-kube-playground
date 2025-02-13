@@ -69,7 +69,8 @@ jobs:
     #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
     - name: Start the Podman socket for the Action
       run: |
-        systemctl --user enable --now podman.socket   
+        systemctl --user enable --now podman.socket
+        ls / -la
 
     # - name: Scan Container Image with CrowdStrike action          
     #   continue-on-error: true
@@ -92,7 +93,6 @@ jobs:
     - name: Scan images via CrowdStrike script
       continue-on-error: true
       run: |
-        mkdir /tmp/
         wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
         # systemctl --user enable --now podman.socket   
         pip3 install podman crowdstrike-falconpy retry
