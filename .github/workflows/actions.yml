@@ -92,9 +92,7 @@ jobs:
         crowdstrike_region: us-1
         crowdstrike_score: 500000
         retry_count: 30
-        # falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }} 
       env:
-        # FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
         JSON_REPORT: /tmp/report.json
   
     - name: Print CrowdStrike Full Image Scan Report
