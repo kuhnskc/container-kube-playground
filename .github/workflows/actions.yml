@@ -62,15 +62,16 @@ jobs:
       with:
         sarif_file: ./scan-results.sarif
 
+#**************************************************************************************************************
+# ensure docker isn't running
+# build the image with podman
+# start the podman socket so our script can connect to it
+#**************************************************************************************************************
+
     - name: Ensure docker is not running
       run: |
         sudo systemctl stop docker.service
         sudo systemctl stop docker.socket
-
-#**************************************************************************************************************
-# build the image with podman
-# start the podman socket so our script can connect to it
-#**************************************************************************************************************
 
     - name: Podman build
       run: |
@@ -91,9 +92,9 @@ jobs:
         crowdstrike_region: us-1
         crowdstrike_score: 500000
         retry_count: 30
-        falcon_client_id: $FALCON_CLIENT_ID
+        falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }} 
       env:
-        FALCON_CLIENT_SECRET: $FALCON_CLIENT_SECRET
+        FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
         JSON_REPORT: /tmp/report.json
   
     - name: Print CrowdStrike Full Image Scan Report
