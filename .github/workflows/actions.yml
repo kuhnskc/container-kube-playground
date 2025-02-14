@@ -68,10 +68,10 @@ jobs:
 # start the podman socket so our script can connect to it
 #**************************************************************************************************************
 
-    - name: Ensure docker is not running
-      run: |
-        sudo systemctl stop docker.service
-        sudo systemctl stop docker.socket
+    # - name: Ensure docker is not running
+    #   run: |
+    #     sudo systemctl stop docker.service
+    #     sudo systemctl stop docker.socket
 
     - name: Podman build
       run: |
