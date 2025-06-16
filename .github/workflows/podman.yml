@@ -125,14 +125,12 @@ jobs:
       continue-on-error: true
       run: |
         set -x  # Enable debug output
-        fcs scan image docker://${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} \
+        fcs scan image podman://${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} \
           --vulnerability-severity low,medium,high,critical \
           --format json \
           --output /tmp/fcs-scan-results.json \
           --verbose \
-          --socket "unix:///run/user/1001/podman/podman.sock" \
-          --timeout 300 \
-          --source-override daemon
+          --timeout 300
           
     # Add error checking for results file
     - name: Print FCS Scan Results
