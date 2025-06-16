@@ -129,14 +129,23 @@ jobs:
       run: |
         set -x  # Enable debug output
         
-        # Run scan with tar source override
+        # Run scan and capture all output
         echo "Starting scan..."
-        fcs scan image /tmp/image.tar \
+        (fcs scan image /tmp/image.tar \
           --vulnerability-severity low,medium,high,critical \
           --format json \
           --output /tmp/fcs-scan-results.json \
           --verbose \
-          --source-override tar
+          --source-override tar) &> /tmp/scan_output.log
+        
+        echo "Complete scan output:"
+        cat /tmp/scan_output.log
+        
+        echo "Exit code: $?"
+        
+        # If the scan failed, let's also check the image tar
+        echo "Tar file contents:"
+        tar tvf /tmp/image.tar | head -n 20
 
     - name: Print FCS Scan Results
       if: always()
