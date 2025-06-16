@@ -140,7 +140,9 @@ jobs:
           --format json \
           --output /tmp/fcs-scan-results.json \
           --verbose \
-          --timeout 300
+          --timeout 300 \
+          --source-override tar
+
 
     # Keep the results checking step
     - name: Print FCS Scan Results
