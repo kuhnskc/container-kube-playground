@@ -133,28 +133,36 @@ jobs:
         # Verify tar file was created
         ls -lh /tmp/image.tar
         
-        # Scan the tar file with error output capture
-        echo "Scanning tar file..."
+        # Run scan in background and capture PID
+        echo "Starting scan..."
         fcs scan image /tmp/image.tar \
           --vulnerability-severity low,medium,high,critical \
           --format json \
           --output /tmp/fcs-scan-results.json \
           --verbose \
-          --source-override tar 2> /tmp/scan_error.log
+          --source-override tar &
         
-        # If scan fails, show the error log
-        if [ $? -ne 0 ]; then
-          echo "Scan failed. Error output:"
-          cat /tmp/scan_error.log
-          
-          echo "Waiting 30 seconds to see if scan completes..."
-          sleep 30
-          
-          # Check if results file appeared after waiting
-          if [ -f /tmp/fcs-scan-results.json ]; then
-            echo "Results file appeared after waiting!"
-            jq '.' /tmp/fcs-scan-results.json
+        SCAN_PID=$!
+        
+        # Wait for scan to complete with timeout
+        TIMEOUT=300
+        while [ $TIMEOUT -gt 0 ]; do
+          if ! kill -0 $SCAN_PID 2>/dev/null; then
+            echo "Scan completed"
+            break
           fi
+          echo "Waiting for scan to complete... ($TIMEOUT seconds remaining)"
+          sleep 10
+          TIMEOUT=$((TIMEOUT-10))
+        done
+        
+        # Check if scan results exist
+        if [ -f /tmp/fcs-scan-results.json ]; then
+          echo "Scan results found:"
+          jq '.' /tmp/fcs-scan-results.json
+        else
+          echo "No scan results found after timeout"
+          exit 1
         fi
 
 
