@@ -115,12 +115,14 @@ jobs:
         echo "Local images:"
         podman images
         
-        # Save the image
+        # Save the image (removing the --format oci-archive flag)
         echo "Saving image to tar..."
-        podman save --format oci-archive ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} -o /tmp/image.tar
+        podman save ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} -o /tmp/image.tar
         
-        # Verify tar file was created
+        # Verify tar file was created and show contents
         ls -lh /tmp/image.tar
+        echo "Checking tar contents:"
+        tar tvf /tmp/image.tar | grep manifest.json
 
     - name: Scan Image
       continue-on-error: true
@@ -136,7 +138,6 @@ jobs:
           --verbose \
           --source-override tar
 
-    # Keep the results checking step
     - name: Print FCS Scan Results
       if: always()
       run: |
