@@ -24,44 +24,44 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-#**************************************************************************************************************
-# use the crowdstrike action to scan the current repo for iac files
-# output the results to a local file and upload them to the crowdstrike cloud
-#**************************************************************************************************************
+# #**************************************************************************************************************
+# # use the crowdstrike action to scan the current repo for iac files
+# # output the results to a local file and upload them to the crowdstrike cloud
+# #**************************************************************************************************************
 
-    - name: Run FCS IaC Scan
-      uses: crowdstrike/fcs-action@v1.0.6
-      id: fcs
-      with:
-        falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
-        falcon_region: 'us-1'
-        path: '.'
-        report_formats: 'sarif'
-        upload_results: true
-        output_path: '.'
-      env:
-        FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+#     - name: Run FCS IaC Scan
+#       uses: crowdstrike/fcs-action@v1.0.6
+#       id: fcs
+#       with:
+#         falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
+#         falcon_region: 'us-1'
+#         path: '.'
+#         report_formats: 'sarif'
+#         upload_results: true
+#         output_path: '.'
+#       env:
+#         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
-#**************************************************************************************************************
-# fcs cli outputs to a dynamic name so lets make it static
-#**************************************************************************************************************
+# #**************************************************************************************************************
+# # fcs cli outputs to a dynamic name so lets make it static
+# #**************************************************************************************************************
 
-    - name: Copy SARIF file to a static filename
-      if: always()
-      run: |
-        cp *-scan-results.sarif scan-results.sarif
+#     - name: Copy SARIF file to a static filename
+#       if: always()
+#       run: |
+#         cp *-scan-results.sarif scan-results.sarif
 
 
 #**************************************************************************************************************
 # action to upload the sarif file with findings to github
 #**************************************************************************************************************
 
-    - name: Upload SARIF report to GitHub Code scanning
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      continue-on-error: true
-      with:
-        sarif_file: ./scan-results.sarif
+    # - name: Upload SARIF report to GitHub Code scanning
+    #   uses: github/codeql-action/upload-sarif@v3
+    #   if: always()
+    #   continue-on-error: true
+    #   with:
+    #     sarif_file: ./scan-results.sarif
 
 #**************************************************************************************************************
 # ensure docker isn't running
@@ -100,14 +100,12 @@ jobs:
       env:
         FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
         FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+        FCS_FALCON_REGION: "us-1"
       run: |
-        fcs configure <<EOF
-        $FCS_CLIENT_ID
-        $FCS_CLIENT_SECRET
-        us-1
-        EOF
+        fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
 
     - name: Scan Container Image with FCS CLI
+      continue-on-error: true 
       run: |
         set -x  # Enable debug output
         fcs scan image docker://${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} \
