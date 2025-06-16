@@ -121,17 +121,32 @@ jobs:
         echo "Listing active images..."
         podman images
 
-    - name: Save and Scan Image
-      continue-on-error: true
+    - name: Check Environment and Save Image
       run: |
-        set -x  # Enable debug output
+        # Check architecture
+        echo "Architecture:"
+        uname -m
+        arch
         
-        # Save image to tar
-        echo "Saving image to tar file..."
-        podman save ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} -o /tmp/image.tar
+        # Check image details
+        echo "Image details:"
+        podman image inspect ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
+        
+        # Pull specifically for amd64
+        echo "Pulling specific architecture..."
+        podman pull --platform linux/amd64 ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
+        
+        # Save the image
+        echo "Saving image to tar..."
+        podman save --format oci-archive ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} -o /tmp/image.tar
         
         # Verify tar file was created
         ls -lh /tmp/image.tar
+
+    - name: Scan Image
+      continue-on-error: true
+      run: |
+        set -x  # Enable debug output
         
         # Run scan in background and capture PID
         echo "Starting scan..."
@@ -155,13 +170,21 @@ jobs:
           sleep 10
           TIMEOUT=$((TIMEOUT-10))
         done
-        
-        # Check if scan results exist
+
+    - name: Check Scan Results
+      if: always()
+      run: |
         if [ -f /tmp/fcs-scan-results.json ]; then
           echo "Scan results found:"
           jq '.' /tmp/fcs-scan-results.json
         else
-          echo "No scan results found after timeout"
+          echo "No scan results found. Checking for errors..."
+          echo "FCS CLI version:"
+          fcs version
+          echo "Listing tmp directory:"
+          ls -la /tmp/
+          echo "Last 100 lines of system log:"
+          sudo tail -n 100 /var/log/syslog || true
           exit 1
         fi
 
