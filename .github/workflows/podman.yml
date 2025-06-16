@@ -130,10 +130,10 @@ jobs:
           --format json \
           --output /tmp/fcs-scan-results.json \
           --verbose \
-          --socket ${{ env.PODMAN_SOCKET }} \
+          --socket "unix:///run/user/1001/podman/podman.sock" \
           --timeout 300 \
           --source-override daemon
-         
+          
     # Add error checking for results file
     - name: Print FCS Scan Results
       if: always()
