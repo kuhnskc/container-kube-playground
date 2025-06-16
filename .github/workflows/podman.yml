@@ -121,16 +121,41 @@ jobs:
         echo "Listing active images..."
         podman images
 
-    - name: Scan Container Image with FCS CLI
+    - name: Save and Scan Image
       continue-on-error: true
       run: |
         set -x  # Enable debug output
-        fcs scan image podman://${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} \
+        
+        # Save image to tar
+        echo "Saving image to tar file..."
+        podman save ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} -o /tmp/image.tar
+        
+        # Verify tar file was created
+        ls -lh /tmp/image.tar
+        
+        # Scan the tar file
+        echo "Scanning tar file..."
+        fcs scan image /tmp/image.tar \
           --vulnerability-severity low,medium,high,critical \
           --format json \
           --output /tmp/fcs-scan-results.json \
           --verbose \
           --timeout 300
+
+    # Keep the results checking step
+    - name: Print FCS Scan Results
+      if: always()
+      run: |
+        if [ -f /tmp/fcs-scan-results.json ]; then
+          echo "Scan results file exists, showing contents:"
+          jq '.' /tmp/fcs-scan-results.json
+        else
+          echo "Scan results file not found. Showing FCS CLI version and status:"
+          fcs version
+          echo "Listing tmp directory contents:"
+          ls -la /tmp/
+        fi
+
           
     # Add error checking for results file
     - name: Print FCS Scan Results
