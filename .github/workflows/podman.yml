@@ -103,6 +103,12 @@ jobs:
         FCS_FALCON_REGION: "us-1"
       run: |
         fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
+   
+    - name: Verify Podman Setup
+      run: |
+        systemctl --user status podman.socket
+        podman info
+        podman images
 
     - name: Scan Container Image with FCS CLI
       continue-on-error: true
