@@ -79,27 +79,67 @@ jobs:
         systemctl --user enable --now podman.socket
 
 #**************************************************************************************************************
+# BETA TESTING - FCS CLI Image Assessment
+# This section uses the new FCS CLI tool for container scanning
+#**************************************************************************************************************
+
+    - name: Configure AWS credentials for FCS CLI
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_FCS }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
+        aws-region: us-west-2
+
+    - name: Download FCS CLI
+      run: |
+        aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
+        chmod +x /usr/local/bin/fcs
+
+    - name: Configure FCS CLI
+      env:
+        FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+        FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+      run: |
+        fcs configure <<EOF
+        $FCS_CLIENT_ID
+        $FCS_CLIENT_SECRET
+        us-1
+        EOF
+
+    - name: Scan Container Image with FCS CLI
+      run: |
+        fcs scan image docker://${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} \
+          --vulnerability-severity low,medium,high,critical \
+          --format json \
+          --output /tmp/fcs-scan-results.json
+
+    - name: Print FCS Scan Results
+      if: always()
+      run: |
+        jq '.' /tmp/fcs-scan-results.json
+
+#**************************************************************************************************************
 # the following section demonstrates how to use the crowdstrike action to assess images
 # navigate to the action directly to read more details
 #**************************************************************************************************************
 
-    - name: Scan Container Image with CrowdStrike action          
-      continue-on-error: true
-      uses: CrowdStrike/container-image-scan-action@main
-      with:
-        container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
-        container_tag: ${{ env.ECR_TAG }}
-        crowdstrike_region: us-1
-        crowdstrike_score: 500000
-        retry_count: 30
-      env:
-        JSON_REPORT: /tmp/report.json
+    # - name: Scan Container Image with CrowdStrike action          
+    #   continue-on-error: true
+    #   uses: CrowdStrike/container-image-scan-action@main
+    #   with:
+    #     container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
+    #     container_tag: ${{ env.ECR_TAG }}
+    #     crowdstrike_region: us-1
+    #     crowdstrike_score: 500000
+    #     retry_count: 30
+    #   env:
+    #     JSON_REPORT: /tmp/report.json
   
-    - name: Print CrowdStrike Full Image Scan Report
-      continue-on-error: true
-      if: always()
-      run: |
-        jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
+    # - name: Print CrowdStrike Full Image Scan Report
+    #   continue-on-error: true
+    #   if: always()
+    #   run: |
+    #     jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
 
 #**************************************************************************************************************
 # the following section demonstrates how to use the python script to assess images
