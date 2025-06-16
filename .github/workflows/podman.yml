@@ -129,36 +129,38 @@ jobs:
       run: |
         set -x  # Enable debug output
         
-        # Run scan and capture all output
+        # Debug: Check FCS CLI version and status
+        fcs version
+        
+        # Debug: Verify tar file
+        echo "Checking tar file:"
+        ls -l /tmp/image.tar
+        file /tmp/image.tar
+        
+        # Debug: Check first few bytes of tar
+        echo "First 100 bytes of tar:"
+        head -c 100 /tmp/image.tar | xxd
+        
+        # Run scan with immediate output
         echo "Starting scan..."
-        (fcs scan image /tmp/image.tar \
+        fcs scan image /tmp/image.tar \
           --vulnerability-severity low,medium,high,critical \
           --format json \
           --output /tmp/fcs-scan-results.json \
           --verbose \
-          --source-override tar) &> /tmp/scan_output.log
+          --source-override tar
         
-        echo "Complete scan output:"
-        cat /tmp/scan_output.log
+        SCAN_EXIT_CODE=$?
+        echo "Scan exit code: $SCAN_EXIT_CODE"
         
-        echo "Exit code: $?"
-        
-        # If the scan failed, let's also check the image tar
-        echo "Tar file contents:"
-        tar tvf /tmp/image.tar | head -n 20
-
-    - name: Print FCS Scan Results
-      if: always()
-      run: |
+        # Debug: Check if output file exists
         if [ -f /tmp/fcs-scan-results.json ]; then
-          echo "Scan results file exists, showing contents:"
-          jq '.' /tmp/fcs-scan-results.json
+          echo "Scan results file exists"
+          ls -l /tmp/fcs-scan-results.json
         else
-          echo "Scan results file not found. Showing FCS CLI version and status:"
-          fcs version
-          echo "Listing tmp directory contents:"
-          ls -la /tmp/
+          echo "No scan results file found"
         fi
+
 
 #**************************************************************************************************************
 # the following section demonstrates how to use the crowdstrike action to assess images
