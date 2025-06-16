@@ -104,23 +104,6 @@ jobs:
       run: |
         fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
    
-    - name: Verify Podman Socket Path
-      run: |
-        echo "Checking Podman socket location..."
-        podman info --format '{{ .Host.RemoteSocket.Path }}'
-        
-        # Store the socket path in an environment variable
-        echo "PODMAN_SOCKET=$(podman info --format '{{ .Host.RemoteSocket.Path }}')" >> $GITHUB_ENV
-        
-        echo "Testing socket exists..."
-        ls -la $(podman info --format '{{ .Host.RemoteSocket.Path }}')
-        
-        echo "Checking Podman service status..."
-        systemctl --user status podman.socket
-        
-        echo "Listing active images..."
-        podman images
-
     - name: Check Environment and Save Image
       run: |
         # Check architecture
@@ -128,13 +111,9 @@ jobs:
         uname -m
         arch
         
-        # Check image details
-        echo "Image details:"
-        podman image inspect ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
-        
-        # Pull specifically for amd64
-        echo "Pulling specific architecture..."
-        podman pull --platform linux/amd64 ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
+        # List local images to confirm it exists
+        echo "Local images:"
+        podman images
         
         # Save the image
         echo "Saving image to tar..."
@@ -148,63 +127,16 @@ jobs:
       run: |
         set -x  # Enable debug output
         
-        # Run scan in background and capture PID
+        # Run scan with tar source override
         echo "Starting scan..."
         fcs scan image /tmp/image.tar \
           --vulnerability-severity low,medium,high,critical \
           --format json \
           --output /tmp/fcs-scan-results.json \
           --verbose \
-          --source-override tar &
-        
-        SCAN_PID=$!
-        
-        # Wait for scan to complete with timeout
-        TIMEOUT=300
-        while [ $TIMEOUT -gt 0 ]; do
-          if ! kill -0 $SCAN_PID 2>/dev/null; then
-            echo "Scan completed"
-            break
-          fi
-          echo "Waiting for scan to complete... ($TIMEOUT seconds remaining)"
-          sleep 10
-          TIMEOUT=$((TIMEOUT-10))
-        done
-
-    - name: Check Scan Results
-      if: always()
-      run: |
-        if [ -f /tmp/fcs-scan-results.json ]; then
-          echo "Scan results found:"
-          jq '.' /tmp/fcs-scan-results.json
-        else
-          echo "No scan results found. Checking for errors..."
-          echo "FCS CLI version:"
-          fcs version
-          echo "Listing tmp directory:"
-          ls -la /tmp/
-          echo "Last 100 lines of system log:"
-          sudo tail -n 100 /var/log/syslog || true
-          exit 1
-        fi
-
+          --source-override tar
 
     # Keep the results checking step
-    - name: Print FCS Scan Results
-      if: always()
-      run: |
-        if [ -f /tmp/fcs-scan-results.json ]; then
-          echo "Scan results file exists, showing contents:"
-          jq '.' /tmp/fcs-scan-results.json
-        else
-          echo "Scan results file not found. Showing FCS CLI version and status:"
-          fcs version
-          echo "Listing tmp directory contents:"
-          ls -la /tmp/
-        fi
-
-          
-    # Add error checking for results file
     - name: Print FCS Scan Results
       if: always()
       run: |
