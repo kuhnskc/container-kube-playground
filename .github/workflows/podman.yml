@@ -135,31 +135,17 @@ jobs:
         # Debug: Verify tar file
         echo "Checking tar file:"
         ls -l /tmp/image.tar
-        file /tmp/image.tar
         
-        # Debug: Check first few bytes of tar
-        echo "First 100 bytes of tar:"
-        head -c 100 /tmp/image.tar | xxd
-        
-        # Run scan with immediate output
+        # Run scan without source override
         echo "Starting scan..."
         fcs scan image /tmp/image.tar \
           --vulnerability-severity low,medium,high,critical \
           --format json \
           --output /tmp/fcs-scan-results.json \
-          --verbose \
-          --source-override tar
+          --verbose
         
         SCAN_EXIT_CODE=$?
         echo "Scan exit code: $SCAN_EXIT_CODE"
-        
-        # Debug: Check if output file exists
-        if [ -f /tmp/fcs-scan-results.json ]; then
-          echo "Scan results file exists"
-          ls -l /tmp/fcs-scan-results.json
-        else
-          echo "No scan results file found"
-        fi
 
 
 #**************************************************************************************************************
