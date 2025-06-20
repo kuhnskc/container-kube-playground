@@ -45,42 +45,20 @@ jobs:
         falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
         falcon_region: 'us-1'
         path: '.'
-        report_formats: 'sarif,json'
+        report_formats: 'sarif'
         output_path: './scan-results'
-        upload_results: true
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
 #**************************************************************************************************************
-# transform the sarif file to be compatible with github security
-#**************************************************************************************************************
-
-    - name: Transform SARIF file
-      if: always()
-      run: |
-        cp ./scan-results/*-scan-results.sarif scan-results.sarif
-        jq '
-          .runs[].tool.driver.informationUri = "https://www.crowdstrike.com" |
-          .runs[].tool.driver.rules[].defaultConfiguration.level |= 
-            if . == "critical" then "error"
-            elif . == "high" then "error"
-            elif . == "medium" then "warning"
-            elif . == "low" then "note"
-            elif . == "informational" then "note"
-            else . end
-        ' scan-results.sarif > transformed-results.sarif
-
-#**************************************************************************************************************
-# action to upload the transformed sarif file with findings to github
+# action to upload the sarif file with findings to github
 #**************************************************************************************************************
 
     - name: Upload SARIF report to GitHub Code scanning
       uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      continue-on-error: true
+      if: steps.fcs.outputs.exit-code != 0
       with:
-        sarif_file: transformed-results.sarif
-        category: crowdstrike-fcs-iac-scanner
+        sarif_file: ./scan-results
 
 #**************************************************************************************************************
 # ensure docker isn't running
