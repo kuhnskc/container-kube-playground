@@ -52,6 +52,15 @@ jobs:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
 #**************************************************************************************************************
+# copy the sarif file to a known name for github upload
+#**************************************************************************************************************
+
+    - name: Copy SARIF file to a static filename
+      if: always()
+      run: |
+        cp ./scan-results/*-scan-results.sarif scan-results.sarif
+
+#**************************************************************************************************************
 # action to upload the sarif file with findings to github
 #**************************************************************************************************************
 
@@ -60,7 +69,7 @@ jobs:
       if: always()
       continue-on-error: true
       with:
-        sarif_file: $(find ./scan-results -name "*-scan-results.sarif" -type f)
+        sarif_file: scan-results.sarif
         
 #**************************************************************************************************************
 # ensure docker isn't running
