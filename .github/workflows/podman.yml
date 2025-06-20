@@ -59,7 +59,16 @@ jobs:
       if: always()
       run: |
         cp ./scan-results/*-scan-results.sarif scan-results.sarif
-        jq '.runs[].tool.driver.informationUri = "https://www.crowdstrike.com"' scan-results.sarif > transformed-results.sarif
+        jq '
+          .runs[].tool.driver.informationUri = "https://www.crowdstrike.com" |
+          .runs[].tool.driver.rules[].defaultConfiguration.level |= 
+            if . == "critical" then "error"
+            elif . == "high" then "error"
+            elif . == "medium" then "warning"
+            elif . == "low" then "note"
+            elif . == "informational" then "note"
+            else . end
+        ' scan-results.sarif > transformed-results.sarif
 
 #**************************************************************************************************************
 # action to upload the transformed sarif file with findings to github
