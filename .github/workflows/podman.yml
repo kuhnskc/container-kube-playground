@@ -50,26 +50,33 @@ jobs:
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
-#**************************************************************************************************************
-# transform sarif to match github's expected format
-#**************************************************************************************************************
-
     - name: Transform SARIF file
       if: always()
       run: |
         SARIF_FILE=$(find ./scan-results -name "*-scan-results.sarif")
+        
+        echo "Current levels in SARIF file:"
+        jq -r '.runs[].tool.driver.rules[].defaultConfiguration.level' "$SARIF_FILE" | sort | uniq
+        
+        echo "Transforming SARIF file..."
         jq '
-          .runs[].tool.driver.informationUri = "https://www.crowdstrike.com" |
-          .runs[].tool.driver.rules[] |= (
-            if .defaultConfiguration.level == "critical" then .defaultConfiguration.level = "error"
-            elif .defaultConfiguration.level == "high" then .defaultConfiguration.level = "error"
-            elif .defaultConfiguration.level == "medium" then .defaultConfiguration.level = "warning"
-            elif .defaultConfiguration.level == "low" then .defaultConfiguration.level = "note"
-            elif .defaultConfiguration.level == "informational" then .defaultConfiguration.level = "note"
+          walk(
+            if type == "object" and .defaultConfiguration.level then
+              .defaultConfiguration.level |= (
+                if . == "critical" or . == "high" then "error"
+                elif . == "medium" then "warning"
+                elif . == "low" or . == "informational" then "note"
+                else "warning"
+                end
+              )
             else .
             end
           )
         ' "$SARIF_FILE" > transformed-results.sarif
+        
+        echo "Transformed levels:"
+        jq -r '.runs[].tool.driver.rules[].defaultConfiguration.level' transformed-results.sarif | sort | uniq
+
 
 #**************************************************************************************************************
 # action to upload the transformed sarif file with findings to github
