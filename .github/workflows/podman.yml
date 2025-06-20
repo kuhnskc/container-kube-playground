@@ -36,7 +36,6 @@ jobs:
 #**************************************************************************************************************
 # use the crowdstrike action to scan the current repo for iac files
 # outputs results to ./scan-results with a timestamp in the filename
-# example: ./scan-results/1750430540-scan-results.sarif
 #**************************************************************************************************************
 
     - name: Run FCS IaC Scan
@@ -52,8 +51,12 @@ jobs:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
 #**************************************************************************************************************
-# copy and transform the sarif file to be compatible with github security
-# converts severity levels to github's expected format (error, warning, note)
+# transform the sarif file to match github security requirements
+# - adds crowdstrike information uri
+# - converts severity levels:
+#   * critical/high -> error
+#   * medium -> warning
+#   * low/informational -> note
 #**************************************************************************************************************
 
     - name: Transform SARIF file
@@ -72,7 +75,7 @@ jobs:
         ' original.sarif > scan-results.sarif
 
 #**************************************************************************************************************
-# upload the transformed sarif file to github security where findings can be reviewed
+# upload the transformed sarif file to github security
 #**************************************************************************************************************
 
     - name: Upload SARIF report to GitHub Code scanning
