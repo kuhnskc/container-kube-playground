@@ -52,6 +52,17 @@ jobs:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
 #**************************************************************************************************************
+# action to upload the sarif file with findings to github
+#**************************************************************************************************************
+
+    - name: Upload SARIF report to GitHub Code scanning
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      continue-on-error: true
+      with:
+        sarif_file: ./scan-results/*-scan-results.sarif
+        
+#**************************************************************************************************************
 # ensure docker isn't running
 # build the image with podman
 # start the podman socket so our script can connect to it
