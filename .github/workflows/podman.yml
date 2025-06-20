@@ -60,7 +60,7 @@ jobs:
       if: always()
       continue-on-error: true
       with:
-        sarif_file: ./scan-results/*-scan-results.sarif
+        sarif_file: $(find ./scan-results -name "*-scan-results.sarif" -type f)
         
 #**************************************************************************************************************
 # ensure docker isn't running
