@@ -51,14 +51,35 @@ jobs:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
 #**************************************************************************************************************
-# action to upload the sarif file with findings to github
+# transform sarif to match github's expected format
+#**************************************************************************************************************
+
+    - name: Transform SARIF file
+      if: always()
+      run: |
+        SARIF_FILE=$(find ./scan-results -name "*-scan-results.sarif")
+        jq '
+          .runs[].tool.driver.informationUri = "https://www.crowdstrike.com" |
+          .runs[].tool.driver.rules[] |= (
+            if .defaultConfiguration.level == "critical" then .defaultConfiguration.level = "error"
+            elif .defaultConfiguration.level == "high" then .defaultConfiguration.level = "error"
+            elif .defaultConfiguration.level == "medium" then .defaultConfiguration.level = "warning"
+            elif .defaultConfiguration.level == "low" then .defaultConfiguration.level = "note"
+            elif .defaultConfiguration.level == "informational" then .defaultConfiguration.level = "note"
+            else .
+            end
+          )
+        ' "$SARIF_FILE" > transformed-results.sarif
+
+#**************************************************************************************************************
+# action to upload the transformed sarif file with findings to github
 #**************************************************************************************************************
 
     - name: Upload SARIF report to GitHub Code scanning
       uses: github/codeql-action/upload-sarif@v3
       if: steps.fcs.outputs.exit-code != 0
       with:
-        sarif_file: ./scan-results
+        sarif_file: transformed-results.sarif
 
 #**************************************************************************************************************
 # ensure docker isn't running
