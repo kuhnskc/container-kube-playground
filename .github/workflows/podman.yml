@@ -34,8 +34,7 @@ jobs:
       run: mkdir -p ./scan-results
 
 #**************************************************************************************************************
-# use the crowdstrike action to scan the current repo for iac files
-# output the results to local files and upload them to the crowdstrike cloud
+# run the iac scan
 #**************************************************************************************************************
 
     - name: Run FCS IaC Scan
@@ -50,33 +49,15 @@ jobs:
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
-    - name: Transform SARIF file
-      if: always()
-      run: |
-        SARIF_FILE=$(find ./scan-results -name "*-scan-results.sarif")
-        
-        echo "Current levels in SARIF file:"
-        jq -r '.runs[].tool.driver.rules[].defaultConfiguration.level' "$SARIF_FILE" | sort | uniq
-        
-        echo "Transforming SARIF file..."
-        jq '
-          walk(
-            if type == "object" and .defaultConfiguration.level then
-              .defaultConfiguration.level |= (
-                if . == "critical" or . == "high" then "error"
-                elif . == "medium" then "warning"
-                elif . == "low" or . == "informational" then "note"
-                else "warning"
-                end
-              )
-            else .
-            end
-          )
-        ' "$SARIF_FILE" > transformed-results.sarif
-        
-        echo "Transformed levels:"
-        jq -r '.runs[].tool.driver.rules[].defaultConfiguration.level' transformed-results.sarif | sort | uniq
+#**************************************************************************************************************
+# upload the results to github
+#**************************************************************************************************************
 
+    - name: Upload SARIF report to GitHub Code scanning
+      uses: github/codeql-action/upload-sarif@v3
+      if: steps.fcs.outputs.exit-code != 0
+      with:
+        sarif_file: ./scan-results/*-scan-results.sarif
 
 #**************************************************************************************************************
 # action to upload the transformed sarif file with findings to github
