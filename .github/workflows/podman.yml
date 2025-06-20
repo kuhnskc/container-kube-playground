@@ -35,7 +35,7 @@ jobs:
 
 #**************************************************************************************************************
 # use the crowdstrike action to scan the current repo for iac files
-# output the results to local files and upload them to both the crowdstrike cloud and github security
+# output the results to local files and upload them to the crowdstrike cloud
 #**************************************************************************************************************
 
     - name: Run FCS IaC Scan
@@ -52,16 +52,17 @@ jobs:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
 #**************************************************************************************************************
-# copy the sarif file to a known name for github upload
+# transform the sarif file to be compatible with github security
 #**************************************************************************************************************
 
-    - name: Copy SARIF file to a static filename
+    - name: Transform SARIF file
       if: always()
       run: |
         cp ./scan-results/*-scan-results.sarif scan-results.sarif
+        jq '.runs[].tool.driver.informationUri = "https://www.crowdstrike.com"' scan-results.sarif > transformed-results.sarif
 
 #**************************************************************************************************************
-# action to upload the sarif file with findings to github
+# action to upload the transformed sarif file with findings to github
 #**************************************************************************************************************
 
     - name: Upload SARIF report to GitHub Code scanning
@@ -69,8 +70,9 @@ jobs:
       if: always()
       continue-on-error: true
       with:
-        sarif_file: scan-results.sarif
-        
+        sarif_file: transformed-results.sarif
+        category: crowdstrike-fcs-iac-scanner
+
 #**************************************************************************************************************
 # ensure docker isn't running
 # build the image with podman
