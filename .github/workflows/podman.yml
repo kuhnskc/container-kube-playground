@@ -27,14 +27,16 @@ jobs:
         fetch-depth: 0
 
 #**************************************************************************************************************
-# create directory for scan results
+# create directory where scan results will be stored
 #**************************************************************************************************************
 
     - name: Create output directory
       run: mkdir -p ./scan-results
 
 #**************************************************************************************************************
-# run the iac scan
+# use the crowdstrike action to scan the current repo for iac files
+# outputs results to ./scan-results with a timestamp in the filename
+# example: ./scan-results/1750430540-scan-results.sarif
 #**************************************************************************************************************
 
     - name: Run FCS IaC Scan
@@ -50,24 +52,25 @@ jobs:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
 #**************************************************************************************************************
-# upload the results to github
+# copy the timestamped sarif file to a static filename that github can find
+# example: cp ./scan-results/1750430540-scan-results.sarif scan-results.sarif
+#**************************************************************************************************************
+
+    - name: Copy SARIF to static filename
+      if: always()
+      run: |
+        cp ./scan-results/*-scan-results.sarif scan-results.sarif
+
+#**************************************************************************************************************
+# upload the sarif file to github security where findings can be reviewed
+# uses the static filename created in the previous step
 #**************************************************************************************************************
 
     - name: Upload SARIF report to GitHub Code scanning
       uses: github/codeql-action/upload-sarif@v3
-      if: steps.fcs.outputs.exit-code != 0
+      if: always()
       with:
-        sarif_file: ./scan-results/*-scan-results.sarif
-
-#**************************************************************************************************************
-# action to upload the transformed sarif file with findings to github
-#**************************************************************************************************************
-
-    - name: Upload SARIF report to GitHub Code scanning
-      uses: github/codeql-action/upload-sarif@v3
-      if: steps.fcs.outputs.exit-code != 0
-      with:
-        sarif_file: transformed-results.sarif
+        sarif_file: scan-results.sarif
 
 #**************************************************************************************************************
 # ensure docker isn't running
