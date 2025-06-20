@@ -52,18 +52,27 @@ jobs:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
 #**************************************************************************************************************
-# copy the timestamped sarif file to a static filename that github can find
-# example: cp ./scan-results/1750430540-scan-results.sarif scan-results.sarif
+# copy and transform the sarif file to be compatible with github security
+# converts severity levels to github's expected format (error, warning, note)
 #**************************************************************************************************************
 
-    - name: Copy SARIF to static filename
+    - name: Transform SARIF file
       if: always()
       run: |
-        cp ./scan-results/*-scan-results.sarif scan-results.sarif
+        cp ./scan-results/*-scan-results.sarif original.sarif
+        jq '
+          .runs[].tool.driver.informationUri = "https://www.crowdstrike.com" |
+          .runs[].tool.driver.rules[] |= (
+            if .defaultConfiguration.level == "critical" or .defaultConfiguration.level == "high" then .defaultConfiguration.level = "error"
+            elif .defaultConfiguration.level == "medium" then .defaultConfiguration.level = "warning"
+            elif .defaultConfiguration.level == "low" or .defaultConfiguration.level == "informational" then .defaultConfiguration.level = "note"
+            else .defaultConfiguration.level = "warning"
+            end
+          )
+        ' original.sarif > scan-results.sarif
 
 #**************************************************************************************************************
-# upload the sarif file to github security where findings can be reviewed
-# uses the static filename created in the previous step
+# upload the transformed sarif file to github security where findings can be reviewed
 #**************************************************************************************************************
 
     - name: Upload SARIF report to GitHub Code scanning
