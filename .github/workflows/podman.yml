@@ -125,6 +125,10 @@ jobs:
       run: |
         fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
    
+    - name: Run FCS CLI
+      run: |
+        fcs scan image ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
+   
     
 
 #**************************************************************************************************************
