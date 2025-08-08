@@ -75,20 +75,15 @@ jobs:
       run: |
         echo "FCS scan exit code: ${{ steps.fcs.outputs.exit-code }}"
         
-        if [ -f "./scan-results/"*"-scan-results.sarif" ]; then
-          CRITICAL_HIGH_COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' ./scan-results/*-scan-results.sarif 2>/dev/null || echo "0")
-          
-          echo "Critical/High severity findings: $CRITICAL_HIGH_COUNT"
-          
-          if [ "$CRITICAL_HIGH_COUNT" -gt "0" ]; then
-            echo "::error::Found $CRITICAL_HIGH_COUNT critical/high severity security issues"
-            exit 1
-          else
-            echo "::notice::No critical/high severity issues found. Medium/low issues are acceptable."
-            echo "PR can proceed - only medium/low severity findings present."
-          fi
+        # Simple approach: if exit code is non-zero, the scan failed
+        if [ "${{ steps.fcs.outputs.exit-code }}" != "0" ]; then
+          echo "::error::FCS scan failed with exit code ${{ steps.fcs.outputs.exit-code }}"
+          echo "::error::This indicates critical or high severity security issues were found"
+          echo "::error::Check the scan results above for details"
+          exit 1
         else
-          echo "::warning::No scan results file found, but exit code was ${{ steps.fcs.outputs.exit-code }}"
+          echo "::notice::FCS scan passed - no critical/high severity issues found"
+          echo "PR can proceed"
         fi
 
     - name: No changes detected
@@ -136,52 +131,3 @@ jobs:
             echo "  - $file" >> $GITHUB_STEP_SUMMARY
           done < changed_files.txt
         fi
-
-#**************************************************************************************************************
-# COMMENTED OUT - Container scanning sections until we can get FCS CLI image assessment working
-#**************************************************************************************************************
-
-    # - name: Ensure docker is not running
-    #   run: |
-    #     sudo systemctl stop docker.service
-    #     sudo systemctl stop docker.socket
-
-    # - name: Podman build
-    #   run: |
-    #     podman build --platform linux/amd64 -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
-    #     systemctl --user enable --now podman.socket
-
-    # - name: Configure AWS credentials for FCS CLI
-    #   uses: aws-actions/configure-aws-credentials@v4
-    #   with:
-    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_FCS }}
-    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
-    #     aws-region: us-west-2
-
-    # - name: Download and Update FCS CLI
-    #   run: |
-    #     echo "Downloading FCS CLI from S3..."
-    #     aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
-    #     chmod +x /usr/local/bin/fcs
-    #     
-    #     echo "Current FCS CLI version:"
-    #     fcs version || echo "Could not get version"
-    #     
-    #     echo "Updating FCS CLI to latest version..."
-    #     fcs update || echo "Update failed or not needed"
-    #     
-    #     echo "Updated FCS CLI version:"
-    #     fcs version || echo "Could not get version after update"
-
-    # - name: Configure FCS CLI
-    #   env:
-    #     FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
-    #     FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
-    #     FCS_FALCON_REGION: "us-1"
-    #   run: |
-    #     fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
-   
-    # - name: Run FCS CLI Image Scan
-    #   run: |
-    #     echo "Scanning container image..."
-    #     fcs scan image ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} --platform linux/amd64 --upload
