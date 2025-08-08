@@ -83,3 +83,30 @@ spec:
               name: cs-pov-victim
               port:
                 number: 80
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-vulnerable-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-vulnerable
+  template:
+    metadata:
+      labels:
+        app: test-vulnerable
+    spec:
+      containers:
+      - name: vulnerable-container
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        securityContext:
+          runAsUser: 0          # Root user - should trigger security finding
+          privileged: true      # Privileged mode - should trigger security finding
+        env:
+        - name: SECRET_KEY
+          value: "hardcoded-secret-123"  # Hardcoded secret
