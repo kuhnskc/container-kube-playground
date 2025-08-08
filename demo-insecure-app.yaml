@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-insecure-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-insecure
+  template:
+    metadata:
+      labels:
+        app: demo-insecure
+    spec:
+      hostNetwork: true          # Critical: Host network access
+      hostPID: true             # Critical: Host PID namespace
+      containers:
+      - name: insecure-container
+        image: nginx:latest
+        securityContext:
+          runAsUser: 0           # High: Running as root
+          privileged: true       # Critical: Privileged container
+          allowPrivilegeEscalation: true
+        env:
+        - name: DATABASE_PASSWORD
+          value: "admin123"      # High: Hardcoded secret
+        - name: API_KEY
+          value: "sk-1234567890abcdef"  # High: Hardcoded API key
+        volumeMounts:
+        - name: host-root
+          mountPath: /host
+      volumes:
+      - name: host-root
+        hostPath:
+          path: /               # Critical: Host root filesystem mount
+          type: Directory
