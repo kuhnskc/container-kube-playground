@@ -1,36 +1,69 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: insecure-test-deployment
+  name: secure-test-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: insecure-test
+      app: secure-test
   template:
     metadata:
       labels:
-        app: insecure-test
+        app: secure-test
     spec:
-      hostNetwork: true        # Critical: Host network access
-      hostPID: true           # Critical: Host PID namespace
+      # Add pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        # Remove host network/PID access
+        # hostNetwork: false (default)
+        # hostPID: false (default)
       containers:
-      - name: insecure-container
+      - name: secure-container
         image: nginx:latest
         securityContext:
-          runAsUser: 0         # High: Running as root
-          privileged: true     # Critical: Privileged container
-          allowPrivilegeEscalation: true  # High: Privilege escalation
+          # Fix: Run as non-root user
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          # Fix: Remove privileged mode
+          privileged: false
+          # Fix: Prevent privilege escalation
+          allowPrivilegeEscalation: false
+          # Fix: Read-only root filesystem
+          readOnlyRootFilesystem: true
+          # Fix: Drop all capabilities
+          capabilities:
+            drop:
+            - ALL
         env:
+        # Fix: Use secret references instead of hardcoded values
         - name: DATABASE_PASSWORD
-          value: "admin123"    # High: Hardcoded secret
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: db-password
         - name: API_KEY
-          value: "sk-1234567890abcdef"  # High: Hardcoded API key
-        volumeMounts:
-        - name: host-root
-          mountPath: /host
-      volumes:
-      - name: host-root
-        hostPath:
-          path: /             # Critical: Host root filesystem mount
-          type: Directory
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: api-key
+        # Remove host filesystem mount
+        # volumeMounts: removed
+      # Remove host volumes
+      # volumes: removed
+
+---
+# Add the secret that the deployment references
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+type: Opaque
+data:
+  # Base64 encoded secure values (these are just examples)
+  db-password: c2VjdXJlLWRhdGFiYXNlLXBhc3N3b3Jk  # "secure-database-password"
+  api-key: c2VjdXJlLWFwaS1rZXktdmFsdWU=          # "secure-api-key-value"
