@@ -25,21 +25,40 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Get changed files
+    - name: Get changed files and create exclusions
       id: changed-files
       run: |
         if [ "${{ github.event_name }}" == "pull_request" ]; then
           echo "This is a PR - scanning only changed files"
           
-          # Get ALL files changed in this PR (no filtering)
+          # Get ALL files changed in this PR
           git diff --name-only origin/${{ github.base_ref }}..HEAD > all_changed_files.txt
           
-          # Exclude only .github workflow files (we don't want to scan those)
+          # Exclude .github workflow files
           grep -v '^\.github/' all_changed_files.txt > changed_files.txt || true
           
           if [ -s changed_files.txt ]; then
-            echo "Changed files found (FCS will determine which are IaC):"
+            echo "Changed files found:"
             cat changed_files.txt
+            
+            # Create exclusion list - exclude everything EXCEPT changed files
+            # Get all YAML files in the repo
+            find . -name "*.yaml" -o -name "*.yml" | grep -v "^\./.git" | sed 's|^\./||' > all_yaml_files.txt
+            
+            # Create exclude list (all files EXCEPT the changed ones)
+            EXCLUDE_LIST=""
+            while read -r file; do
+              if ! grep -q "^$file$" changed_files.txt; then
+                if [ -z "$EXCLUDE_LIST" ]; then
+                  EXCLUDE_LIST="$file"
+                else
+                  EXCLUDE_LIST="$EXCLUDE_LIST,$file"
+                fi
+              fi
+            done < all_yaml_files.txt
+            
+            echo "Excluding files: $EXCLUDE_LIST"
+            echo "exclude_paths=$EXCLUDE_LIST" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
             echo "scan_mode=pr_changes" >> $GITHUB_OUTPUT
           else
@@ -49,6 +68,7 @@ jobs:
           fi
         else
           echo "Manual trigger - scanning entire repository"
+          echo "exclude_paths=" >> $GITHUB_OUTPUT
           echo "has_changes=true" >> $GITHUB_OUTPUT
           echo "scan_mode=full_repo" >> $GITHUB_OUTPUT
         fi
@@ -64,6 +84,7 @@ jobs:
         falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
         falcon_region: 'us-1'
         path: '.'
+        exclude_paths: ${{ steps.changed-files.outputs.exclude_paths }}
         report_formats: 'sarif'
         output_path: './scan-results'
         fail_on: 'critical=1,high=1'
@@ -75,14 +96,12 @@ jobs:
       run: |
         echo "FCS scan exit code: ${{ steps.fcs.outputs.exit-code }}"
         
-        # Simple approach: if exit code is non-zero, the scan failed
         if [ "${{ steps.fcs.outputs.exit-code }}" != "0" ]; then
           echo "::error::FCS scan failed with exit code ${{ steps.fcs.outputs.exit-code }}"
-          echo "::error::This indicates critical or high severity security issues were found"
-          echo "::error::Check the scan results above for details"
+          echo "::error::This indicates critical or high severity security issues were found in changed files"
           exit 1
         else
-          echo "::notice::FCS scan passed - no critical/high severity issues found"
+          echo "::notice::FCS scan passed - no critical/high severity issues found in changed files"
           echo "PR can proceed"
         fi
 
@@ -90,7 +109,6 @@ jobs:
       if: steps.changed-files.outputs.has_changes == 'false'
       run: |
         echo "::notice::No files were changed in this PR (excluding workflow files). Skipping security scan."
-        echo "Scan mode: ${{ steps.changed-files.outputs.scan_mode }}"
 
     - name: Transform SARIF file
       if: always() && steps.changed-files.outputs.has_changes == 'true'
@@ -124,10 +142,4 @@ jobs:
         echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Scan Mode**: ${{ steps.changed-files.outputs.scan_mode }}" >> $GITHUB_STEP_SUMMARY
         echo "- **FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "${{ github.event_name }}" == "pull_request" ] && [ -f changed_files.txt ]; then
-          echo "- **Changed Files (FCS will filter for IaC)**:" >> $GITHUB_STEP_SUMMARY
-          while read -r file; do
-            echo "  - $file" >> $GITHUB_STEP_SUMMARY
-          done < changed_files.txt
-        fi
+        echo "- **Excluded Files**: \`${{ steps.changed-files.outputs.exclude_paths }}\`" >> $GITHUB_STEP_SUMMARY
