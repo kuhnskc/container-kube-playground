@@ -28,11 +28,6 @@ spec:
       annotations:
         sensor.falcon-system.crowdstrike.com/injection: enabled
     spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
       containers:
         - name: app
           image: falconpioupiou/shellshock:latest
@@ -40,33 +35,18 @@ spec:
           ports:
             - containerPort: 80
               name: web
+          volumeMounts:
+          - mountPath: /run/containerd/containerd.sock
+            name: containerd-socket-volume
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            runAsGroup: 1000
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop:
-                - ALL
-          # Removed the host path volume mount for security
-          # volumeMounts:
-          # - mountPath: /run/containerd/containerd.sock
-          #   name: containerd-socket-volume
-          env:
-          # Use a secret reference instead of hardcoded value
-          - name: SECRET_KEY
-            valueFrom:
-              secretKeyRef:
-                name: app-secrets
-                key: secret-key
+            runAsUser: 0
+            runAsGroup: 0      
 
-      # Removed the host path volume for security
-      # volumes:
-      #   - name: containerd-socket-volume
-      #     hostPath:
-      #       path: /run/containerd/containerd.sock
-      #       type: ""
+      volumes:
+        - name: containerd-socket-volume
+          hostPath:
+            path: /run/containerd/containerd.sock
+            type: ""
 ---
 apiVersion: v1
 kind: Service
@@ -104,5 +84,29 @@ spec:
               port:
                 number: 80
 
-# Removed the vulnerable deployment entirely
-# The test-vulnerable-deployment had multiple security issues
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-vulnerable-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-vulnerable
+  template:
+    metadata:
+      labels:
+        app: test-vulnerable
+    spec:
+      containers:
+      - name: vulnerable-container
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        securityContext:
+          runAsUser: 0          # Root user - should trigger security finding
+          privileged: true      # Privileged mode - should trigger security finding
+        env:
+        - name: SECRET_KEY
+          value: "hardcoded-secret-123"  # Hardcoded secret
