@@ -66,9 +66,23 @@ jobs:
         path: ${{ steps.changed-files.outputs.scan_path }}
         report_formats: 'sarif'
         output_path: './scan-results'
-        fail_on: ${{ github.event_name == 'pull_request' && 'critical=1,high=1' || '' }}
+        # Set fail_on for PRs, use default for manual runs
+        fail_on: ${{ github.event_name == 'pull_request' && 'critical=1,high=1' || 'critical=1,high=1,medium=1,informational=1' }}
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+
+    # Explicit check using the action's exit code output
+    - name: Check FCS scan results
+      if: always() && steps.changed-files.outputs.has_iac_changes == 'true' && github.event_name == 'pull_request'
+      run: |
+        echo "FCS scan exit code: ${{ steps.fcs.outputs.exit-code }}"
+        if [ "${{ steps.fcs.outputs.exit-code }}" != "0" ]; then
+          echo "::error::FCS scan found security issues that exceed the failure threshold"
+          echo "::error::Check the scan results above for details"
+          exit 1
+        else
+          echo "FCS scan passed - no issues above failure threshold"
+        fi
 
     - name: No IaC changes detected
       if: steps.changed-files.outputs.has_iac_changes == 'false'
@@ -108,6 +122,7 @@ jobs:
         echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Scan Mode**: ${{ steps.changed-files.outputs.scan_mode }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Path Scanned**: \`${{ steps.changed-files.outputs.scan_path }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
         
         if [ "${{ github.event_name }}" == "pull_request" ] && [ -f iac_changed_files.txt ]; then
           echo "- **Changed IaC Files**:" >> $GITHUB_STEP_SUMMARY
