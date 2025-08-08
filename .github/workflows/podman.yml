@@ -97,63 +97,45 @@ jobs:
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
-    - name: Display Detailed Scan Results
+    - name: Debug JSON Structure
       if: always() && steps.changed-files.outputs.has_changes == 'true'
       run: |
-        echo "=== FCS SCAN RESULTS ANALYSIS ==="
-        echo "Exit Code: ${{ steps.fcs.outputs.exit-code }}"
-        echo ""
-        
-        # Check if JSON results exist and display them
+        echo "=== DEBUGGING JSON STRUCTURE ==="
         if ls ./scan-results/*-scan-results.json 1> /dev/null 2>&1; then
-          echo "=== JSON SCAN RESULTS ==="
           JSON_FILE=$(ls ./scan-results/*-scan-results.json | head -1)
           echo "JSON file: $JSON_FILE"
-          
-          # Display summary
           echo ""
-          echo "=== VULNERABILITY SUMMARY ==="
-          jq -r '.vulnerabilities | group_by(.severity) | map({severity: .[0].severity, count: length}) | .[] | "\(.severity): \(.count)"' "$JSON_FILE" 2>/dev/null || echo "Could not parse vulnerability summary"
-          
+          echo "=== JSON TOP-LEVEL KEYS ==="
+          jq -r 'keys[]' "$JSON_FILE" 2>/dev/null || echo "Could not parse JSON keys"
           echo ""
-          echo "=== HIGH/CRITICAL VULNERABILITIES ==="
-          jq -r '.vulnerabilities[] | select(.severity == "high" or .severity == "critical") | "- \(.severity | ascii_upcase): \(.title) (File: \(.file_path), Line: \(.line_number // "N/A"))"' "$JSON_FILE" 2>/dev/null || echo "No high/critical vulnerabilities found in JSON"
-          
+          echo "=== FIRST 50 LINES OF JSON ==="
+          head -50 "$JSON_FILE"
           echo ""
-          echo "=== DETECTION SUMMARY ==="
-          jq -r '.detections | group_by(.severity) | map({severity: .[0].severity, count: length}) | .[] | "\(.severity): \(.count)"' "$JSON_FILE" 2>/dev/null || echo "Could not parse detection summary"
-          
+          echo "=== SEARCH FOR HIGH SEVERITY IN RAW JSON ==="
+          grep -i "high" "$JSON_FILE" || echo "No 'high' found in JSON"
           echo ""
-          echo "=== HIGH/CRITICAL DETECTIONS ==="
-          jq -r '.detections[] | select(.severity == "high" or .severity == "critical") | "- \(.severity | ascii_upcase): \(.title) (File: \(.file_path), Line: \(.line_number // "N/A"))"' "$JSON_FILE" 2>/dev/null || echo "No high/critical detections found in JSON"
-          
+          echo "=== SEARCH FOR CRITICAL SEVERITY IN RAW JSON ==="
+          grep -i "critical" "$JSON_FILE" || echo "No 'critical' found in JSON"
         else
-          echo "No JSON results file found"
+          echo "No JSON file found"
         fi
-        
-        # Check SARIF results as backup
+
+    - name: Debug SARIF Structure
+      if: always() && steps.changed-files.outputs.has_changes == 'true'
+      run: |
+        echo "=== DEBUGGING SARIF STRUCTURE ==="
         if ls ./scan-results/*-scan-results.sarif 1> /dev/null 2>&1; then
-          echo ""
-          echo "=== SARIF RESULTS SUMMARY ==="
           SARIF_FILE=$(ls ./scan-results/*-scan-results.sarif | head -1)
           echo "SARIF file: $SARIF_FILE"
-          
-          # Count results by level
           echo ""
-          echo "=== SARIF FINDINGS BY LEVEL ==="
-          jq -r '.runs[].results | group_by(.level) | map({level: (.[0].level // "unknown"), count: length}) | .[] | "\(.level): \(.count)"' "$SARIF_FILE" 2>/dev/null || echo "Could not parse SARIF summary"
-          
+          echo "=== SARIF RESULTS SAMPLE ==="
+          jq -r '.runs[].results[0:3]' "$SARIF_FILE" 2>/dev/null || echo "Could not parse SARIF results"
           echo ""
-          echo "=== HIGH/CRITICAL SARIF FINDINGS ==="
-          jq -r '.runs[].results[] | select(.level == "error" or .level == "high" or .level == "critical") | "- \(.level | ascii_upcase): \(.message.text) (Rule: \(.ruleId))"' "$SARIF_FILE" 2>/dev/null || echo "No high/critical findings in SARIF"
-          
+          echo "=== SEARCH FOR HIGH/CRITICAL IN RAW SARIF ==="
+          grep -i -E "(high|critical)" "$SARIF_FILE" || echo "No high/critical found in SARIF"
         else
-          echo "No SARIF results file found"
+          echo "No SARIF file found"
         fi
-        
-        echo ""
-        echo "=== FILES SCANNED ==="
-        find ./scan-results -name "*-scan-results.*" -exec ls -la {} \;
 
     - name: Check FCS scan results
       if: always() && steps.changed-files.outputs.has_changes == 'true' && github.event_name == 'pull_request'
@@ -163,7 +145,7 @@ jobs:
         if [ "${{ steps.fcs.outputs.exit-code }}" != "0" ]; then
           echo "::error::FCS scan failed with exit code ${{ steps.fcs.outputs.exit-code }}"
           echo "::error::This indicates critical or high severity security issues were found in changed files"
-          echo "::error::Check the 'Display Detailed Scan Results' step above for specific findings"
+          echo "::error::Check the debug steps above for specific findings"
           exit 1
         else
           echo "::notice::FCS scan passed - no critical/high severity issues found in changed files"
