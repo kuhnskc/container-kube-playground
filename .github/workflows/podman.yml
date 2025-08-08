@@ -135,7 +135,7 @@ jobs:
 
     - name: Podman build
       run: |
-        podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
+        podman build --platform linux/amd64 -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
         systemctl --user enable --now podman.socket
 
 #**************************************************************************************************************
@@ -150,10 +150,20 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
         aws-region: us-west-2
 
-    - name: Download FCS CLI
+    - name: Download and Update FCS CLI
       run: |
+        echo "Downloading FCS CLI from S3..."
         aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
         chmod +x /usr/local/bin/fcs
+        
+        echo "Current FCS CLI version:"
+        fcs version || echo "Could not get version"
+        
+        echo "Updating FCS CLI to latest version..."
+        fcs update || echo "Update failed or not needed"
+        
+        echo "Updated FCS CLI version:"
+        fcs version || echo "Could not get version after update"
 
     - name: Configure FCS CLI
       env:
@@ -163,9 +173,10 @@ jobs:
       run: |
         fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
    
-    - name: Run FCS CLI
+    - name: Run FCS CLI Image Scan
       run: |
-        fcs scan image ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
+        echo "Scanning container image with platform specification..."
+        fcs scan image --platform linux/amd64 ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
 
     - name: Scan Summary
       if: always()
@@ -174,6 +185,7 @@ jobs:
         echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Scan Mode**: ${{ steps.changed-files.outputs.scan_mode }}" >> $GITHUB_STEP_SUMMARY
         echo "- **IaC FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Container Platform**: linux/amd64" >> $GITHUB_STEP_SUMMARY
         
         if [ "${{ github.event_name }}" == "pull_request" ] && [ -f changed_files.txt ]; then
           echo "- **Changed Files (FCS will filter for IaC)**:" >> $GITHUB_STEP_SUMMARY
