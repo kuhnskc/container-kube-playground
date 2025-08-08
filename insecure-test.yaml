@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: secure-test-deployment
+  labels:
+    app: secure-test
 spec:
   replicas: 1
   selector:
@@ -12,35 +14,41 @@ spec:
       labels:
         app: secure-test
     spec:
-      # Add pod-level security context
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
-        # Remove host network/PID access
-        # hostNetwork: false (default)
-        # hostPID: false (default)
+        runAsUser: 10001  # Higher UID to avoid "low UID" issue
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: secure-container
-        image: nginx:latest
+        image: nginx:1.25.3
+        imagePullPolicy: Always
         securityContext:
-          # Fix: Run as non-root user
           runAsNonRoot: true
-          runAsUser: 1000
-          runAsGroup: 1000
-          # Fix: Remove privileged mode
-          privileged: false
-          # Fix: Prevent privilege escalation
+          runAsUser: 10001  # Higher UID to avoid "low UID" issue
+          runAsGroup: 10001
           allowPrivilegeEscalation: false
-          # Fix: Read-only root filesystem
           readOnlyRootFilesystem: true
-          # Fix: Drop all capabilities
           capabilities:
             drop:
             - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        # Fix: Add memory limits (this was flagged as undefined)
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi  # This was missing and flagged
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
         env:
-        # Fix: Use secret references instead of hardcoded values
         - name: DATABASE_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -51,19 +59,44 @@ spec:
             secretKeyRef:
               name: app-secrets
               key: api-key
-        # Remove host filesystem mount
-        # volumeMounts: removed
-      # Remove host volumes
-      # volumes: removed
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 
 ---
-# Add the secret that the deployment references
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-test-service
+  labels:
+    app: secure-test
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: secure-test
+
+---
 apiVersion: v1
 kind: Secret
 metadata:
   name: app-secrets
 type: Opaque
 data:
-  # Base64 encoded secure values (these are just examples)
-  db-password: c2VjdXJlLWRhdGFiYXNlLXBhc3N3b3Jk  # "secure-database-password"
-  api-key: c2VjdXJlLWFwaS1rZXktdmFsdWU=          # "secure-api-key-value"
+  db-password: c2VjdXJlLWRhdGFiYXNlLXBhc3N3b3Jk
+  api-key: c2VjdXJlLWFwaS1rZXktdmFsdWU=
