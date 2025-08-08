@@ -97,44 +97,42 @@ jobs:
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
-    - name: Debug JSON Structure
+    - name: Display Detailed Scan Results
       if: always() && steps.changed-files.outputs.has_changes == 'true'
       run: |
-        echo "=== DEBUGGING JSON STRUCTURE ==="
+        echo "=== FCS SCAN RESULTS ANALYSIS ==="
+        echo "Exit Code: ${{ steps.fcs.outputs.exit-code }}"
+        echo ""
+        
+        # Check if JSON results exist and display them with correct structure
         if ls ./scan-results/*-scan-results.json 1> /dev/null 2>&1; then
+          echo "=== JSON SCAN RESULTS ==="
           JSON_FILE=$(ls ./scan-results/*-scan-results.json | head -1)
           echo "JSON file: $JSON_FILE"
+          
+          # Display summary using correct JSON structure
           echo ""
-          echo "=== JSON TOP-LEVEL KEYS ==="
-          jq -r 'keys[]' "$JSON_FILE" 2>/dev/null || echo "Could not parse JSON keys"
+          echo "=== DETECTION SUMMARY ==="
+          jq -r '.detection_summary | to_entries[] | "\(.key): \(.value)"' "$JSON_FILE" 2>/dev/null || echo "Could not parse detection summary"
+          
           echo ""
-          echo "=== FIRST 50 LINES OF JSON ==="
-          head -50 "$JSON_FILE"
+          echo "=== HIGH/CRITICAL DETECTIONS ==="
+          jq -r '.rule_detections[] | select(.severity == "High" or .severity == "Critical") | "- \(.severity | ascii_upcase): \(.title) (File: \(.file_path), Line: \(.line_number // "N/A"))"' "$JSON_FILE" 2>/dev/null || echo "No high/critical detections found"
+          
           echo ""
-          echo "=== SEARCH FOR HIGH SEVERITY IN RAW JSON ==="
-          grep -i "high" "$JSON_FILE" || echo "No 'high' found in JSON"
-          echo ""
-          echo "=== SEARCH FOR CRITICAL SEVERITY IN RAW JSON ==="
-          grep -i "critical" "$JSON_FILE" || echo "No 'critical' found in JSON"
+          echo "=== ALL DETECTIONS (for debugging) ==="
+          jq -r '.rule_detections[] | "- \(.severity): \(.title) (File: \(.file_path), Line: \(.line_number // "N/A"))"' "$JSON_FILE" 2>/dev/null | head -10 || echo "Could not parse detections"
+          
         else
-          echo "No JSON file found"
+          echo "No JSON results file found"
         fi
-
-    - name: Debug SARIF Structure
-      if: always() && steps.changed-files.outputs.has_changes == 'true'
-      run: |
-        echo "=== DEBUGGING SARIF STRUCTURE ==="
+        
+        # Also check SARIF for additional context
         if ls ./scan-results/*-scan-results.sarif 1> /dev/null 2>&1; then
+          echo ""
+          echo "=== SARIF SAMPLE FINDINGS ==="
           SARIF_FILE=$(ls ./scan-results/*-scan-results.sarif | head -1)
-          echo "SARIF file: $SARIF_FILE"
-          echo ""
-          echo "=== SARIF RESULTS SAMPLE ==="
-          jq -r '.runs[].results[0:3]' "$SARIF_FILE" 2>/dev/null || echo "Could not parse SARIF results"
-          echo ""
-          echo "=== SEARCH FOR HIGH/CRITICAL IN RAW SARIF ==="
-          grep -i -E "(high|critical)" "$SARIF_FILE" || echo "No high/critical found in SARIF"
-        else
-          echo "No SARIF file found"
+          jq -r '.runs[].results[0:5][] | "- \(.message.text) (Line: \(.locations[0].physicalLocation.region.startLine // "N/A"))"' "$SARIF_FILE" 2>/dev/null || echo "Could not parse SARIF"
         fi
 
     - name: Check FCS scan results
@@ -145,7 +143,7 @@ jobs:
         if [ "${{ steps.fcs.outputs.exit-code }}" != "0" ]; then
           echo "::error::FCS scan failed with exit code ${{ steps.fcs.outputs.exit-code }}"
           echo "::error::This indicates critical or high severity security issues were found in changed files"
-          echo "::error::Check the debug steps above for specific findings"
+          echo "::error::Check the 'Display Detailed Scan Results' step above for specific findings"
           exit 1
         else
           echo "::notice::FCS scan passed - no critical/high severity issues found in changed files"
@@ -190,3 +188,52 @@ jobs:
         echo "- **Scan Mode**: ${{ steps.changed-files.outputs.scan_mode }}" >> $GITHUB_STEP_SUMMARY
         echo "- **FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Files Excluded**: $(echo '${{ steps.changed-files.outputs.exclude_paths }}' | tr ',' '\n' | wc -l)" >> $GITHUB_STEP_SUMMARY
+
+#**************************************************************************************************************
+# COMMENTED OUT - Container scanning sections until we can get FCS CLI image assessment working
+#**************************************************************************************************************
+
+    # - name: Ensure docker is not running
+    #   run: |
+    #     sudo systemctl stop docker.service
+    #     sudo systemctl stop docker.socket
+
+    # - name: Podman build
+    #   run: |
+    #     podman build --platform linux/amd64 -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
+    #     systemctl --user enable --now podman.socket
+
+    # - name: Configure AWS credentials for FCS CLI
+    #   uses: aws-actions/configure-aws-credentials@v4
+    #   with:
+    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_FCS }}
+    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
+    #     aws-region: us-west-2
+
+    # - name: Download and Update FCS CLI
+    #   run: |
+    #     echo "Downloading FCS CLI from S3..."
+    #     aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
+    #     chmod +x /usr/local/bin/fcs
+    #     
+    #     echo "Current FCS CLI version:"
+    #     fcs version || echo "Could not get version"
+    #     
+    #     echo "Updating FCS CLI to latest version..."
+    #     fcs update || echo "Update failed or not needed"
+    #     
+    #     echo "Updated FCS CLI version:"
+    #     fcs version || echo "Could not get version after update"
+
+    # - name: Configure FCS CLI
+    #   env:
+    #     FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+    #     FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+    #     FCS_FALCON_REGION: "us-1"
+    #   run: |
+    #     fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
+   
+    # - name: Run FCS CLI Image Scan
+    #   run: |
+    #     echo "Scanning container image..."
+    #     fcs scan image ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} --platform linux/amd64 --upload
