@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: secure-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-test-deployment
+  namespace: secure-app
+  labels:
+    app: secure-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secure-test
+  template:
+    metadata:
+      labels:
+        app: secure-test
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/secure-container: runtime/default
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: secure-container
+        image: nginx:1.25.3@sha256:4c0fdaa8b6341bfdeca5f18f7837462c80cff90527ee35ef185571e1c327beac
+        imagePullPolicy: Always
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          runAsGroup: 10001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        # Remove environment variables with secrets entirely
+        # env:
+        # - name: DATABASE_PASSWORD
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: app-secrets
+        #       key: db-password
+        # - name: API_KEY
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: app-secrets
+        #       key: api-key
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          readOnly: true
+        - name: cache
+          mountPath: /var/cache/nginx
+          readOnly: true
+        - name: run
+          mountPath: /var/run
+          readOnly: true
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-test-service
+  namespace: secure-app
+  labels:
+    app: secure-test
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: secure-test
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: secure-app-limits
+  namespace: secure-app
+spec:
+  limits:
+  - default:
+      cpu: 100m
+      memory: 128Mi
+    defaultRequest:
+      cpu: 50m
+      memory: 64Mi
+    type: Container
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: secure-app-quota
+  namespace: secure-app
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi

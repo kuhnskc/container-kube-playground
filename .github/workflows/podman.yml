@@ -25,21 +25,46 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Get changed files
+    - name: Get changed files and create exclusions
       id: changed-files
       run: |
         if [ "${{ github.event_name }}" == "pull_request" ]; then
           echo "This is a PR - scanning only changed files"
           
-          # Get ALL files changed in this PR (no filtering)
+          # Get ALL files changed in this PR
           git diff --name-only origin/${{ github.base_ref }}..HEAD > all_changed_files.txt
           
-          # Exclude only .github workflow files (we don't want to scan those)
+          # Exclude .github workflow files from changed files
           grep -v '^\.github/' all_changed_files.txt > changed_files.txt || true
           
           if [ -s changed_files.txt ]; then
-            echo "Changed files found (FCS will determine which are IaC):"
+            echo "Changed files found:"
             cat changed_files.txt
+            
+            # Find ALL files in the repo (excluding .git and .github)
+            find . -type f \
+              -not -path "./.git/*" \
+              -not -path "./.github/*" \
+              | sed 's|^\./||' > all_files.txt
+            
+            echo "Total files in repo: $(wc -l < all_files.txt)"
+            echo "Changed files: $(wc -l < changed_files.txt)"
+            
+            # Create exclusion list: all files MINUS changed files
+            EXCLUDE_LIST=""
+            while read -r file; do
+              # If this file is NOT in the changed files list, add it to exclusions
+              if ! grep -q "^$file$" changed_files.txt; then
+                if [ -z "$EXCLUDE_LIST" ]; then
+                  EXCLUDE_LIST="$file"
+                else
+                  EXCLUDE_LIST="$EXCLUDE_LIST,$file"
+                fi
+              fi
+            done < all_files.txt
+            
+            echo "Files to exclude: $(echo "$EXCLUDE_LIST" | tr ',' '\n' | wc -l)"
+            echo "exclude_paths=$EXCLUDE_LIST" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
             echo "scan_mode=pr_changes" >> $GITHUB_OUTPUT
           else
@@ -49,6 +74,7 @@ jobs:
           fi
         else
           echo "Manual trigger - scanning entire repository"
+          echo "exclude_paths=" >> $GITHUB_OUTPUT
           echo "has_changes=true" >> $GITHUB_OUTPUT
           echo "scan_mode=full_repo" >> $GITHUB_OUTPUT
         fi
@@ -64,38 +90,70 @@ jobs:
         falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
         falcon_region: 'us-1'
         path: '.'
-        report_formats: 'sarif'
+        exclude_paths: ${{ steps.changed-files.outputs.exclude_paths }}
+        report_formats: 'sarif,json'
         output_path: './scan-results'
         fail_on: 'critical=1,high=1'
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+
+    - name: Display Detailed Scan Results
+      if: always() && steps.changed-files.outputs.has_changes == 'true'
+      run: |
+        echo "=== FCS SCAN RESULTS ANALYSIS ==="
+        echo "Exit Code: ${{ steps.fcs.outputs.exit-code }}"
+        echo ""
+        
+        # Check if JSON results exist and display them with correct structure
+        if ls ./scan-results/*-scan-results.json 1> /dev/null 2>&1; then
+          echo "=== JSON SCAN RESULTS ==="
+          JSON_FILE=$(ls ./scan-results/*-scan-results.json | head -1)
+          echo "JSON file: $JSON_FILE"
+          
+          # Display summary using correct JSON structure
+          echo ""
+          echo "=== DETECTION SUMMARY ==="
+          jq -r '.detection_summary | to_entries[] | "\(.key): \(.value)"' "$JSON_FILE" 2>/dev/null || echo "Could not parse detection summary"
+          
+          echo ""
+          echo "=== HIGH/CRITICAL DETECTIONS ==="
+          jq -r '.rule_detections[] | select(.severity == "High" or .severity == "Critical") | "- \(.severity | ascii_upcase): \(.title) (File: \(.file_path), Line: \(.line_number // "N/A"))"' "$JSON_FILE" 2>/dev/null || echo "No high/critical detections found"
+          
+          echo ""
+          echo "=== ALL DETECTIONS (for debugging) ==="
+          jq -r '.rule_detections[] | "- \(.severity): \(.title) (File: \(.file_path), Line: \(.line_number // "N/A"))"' "$JSON_FILE" 2>/dev/null | head -10 || echo "Could not parse detections"
+          
+        else
+          echo "No JSON results file found"
+        fi
+        
+        # Also check SARIF for additional context
+        if ls ./scan-results/*-scan-results.sarif 1> /dev/null 2>&1; then
+          echo ""
+          echo "=== SARIF SAMPLE FINDINGS ==="
+          SARIF_FILE=$(ls ./scan-results/*-scan-results.sarif | head -1)
+          jq -r '.runs[].results[0:5][] | "- \(.message.text) (Line: \(.locations[0].physicalLocation.region.startLine // "N/A"))"' "$SARIF_FILE" 2>/dev/null || echo "Could not parse SARIF"
+        fi
 
     - name: Check FCS scan results
       if: always() && steps.changed-files.outputs.has_changes == 'true' && github.event_name == 'pull_request'
       run: |
         echo "FCS scan exit code: ${{ steps.fcs.outputs.exit-code }}"
         
-        if [ -f "./scan-results/"*"-scan-results.sarif" ]; then
-          CRITICAL_HIGH_COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' ./scan-results/*-scan-results.sarif 2>/dev/null || echo "0")
-          
-          echo "Critical/High severity findings: $CRITICAL_HIGH_COUNT"
-          
-          if [ "$CRITICAL_HIGH_COUNT" -gt "0" ]; then
-            echo "::error::Found $CRITICAL_HIGH_COUNT critical/high severity security issues"
-            exit 1
-          else
-            echo "::notice::No critical/high severity issues found. Medium/low issues are acceptable."
-            echo "PR can proceed - only medium/low severity findings present."
-          fi
+        if [ "${{ steps.fcs.outputs.exit-code }}" != "0" ]; then
+          echo "::error::FCS scan failed with exit code ${{ steps.fcs.outputs.exit-code }}"
+          echo "::error::This indicates critical or high severity security issues were found in changed files"
+          echo "::error::Check the 'Display Detailed Scan Results' step above for specific findings"
+          exit 1
         else
-          echo "::warning::No scan results file found, but exit code was ${{ steps.fcs.outputs.exit-code }}"
+          echo "::notice::FCS scan passed - no critical/high severity issues found in changed files"
+          echo "PR can proceed"
         fi
 
     - name: No changes detected
       if: steps.changed-files.outputs.has_changes == 'false'
       run: |
         echo "::notice::No files were changed in this PR (excluding workflow files). Skipping security scan."
-        echo "Scan mode: ${{ steps.changed-files.outputs.scan_mode }}"
 
     - name: Transform SARIF file
       if: always() && steps.changed-files.outputs.has_changes == 'true'
@@ -129,13 +187,7 @@ jobs:
         echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Scan Mode**: ${{ steps.changed-files.outputs.scan_mode }}" >> $GITHUB_STEP_SUMMARY
         echo "- **FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "${{ github.event_name }}" == "pull_request" ] && [ -f changed_files.txt ]; then
-          echo "- **Changed Files (FCS will filter for IaC)**:" >> $GITHUB_STEP_SUMMARY
-          while read -r file; do
-            echo "  - $file" >> $GITHUB_STEP_SUMMARY
-          done < changed_files.txt
-        fi
+        echo "- **Files Excluded**: $(echo '${{ steps.changed-files.outputs.exclude_paths }}' | tr ',' '\n' | wc -l)" >> $GITHUB_STEP_SUMMARY
 
 #**************************************************************************************************************
 # COMMENTED OUT - Container scanning sections until we can get FCS CLI image assessment working
