@@ -2,12 +2,12 @@ name: actions-jobs
 on: 
   workflow_dispatch:
   pull_request:
-    branches: [ "main", "master" ]  # Added PR trigger
+    branches: [ "main", "master" ]
 
-#**************************************************************************************************************
-# define environment variables used throughout the workflow
-# FALCON_CLIENT_ID and FALCON_CLIENT_SECRET are api credentials created in the crowdstrike console
-#**************************************************************************************************************
+permissions:
+  contents: read
+  security-events: write
+  actions: read
 
 env:
   FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }} 
@@ -19,19 +19,11 @@ jobs:
   sec-scans:
     runs-on: ubuntu-latest
 
-#**************************************************************************************************************
-# checkout the code so we have it locally on the runner
-#**************************************************************************************************************
-
     steps:
     - name: Checkout
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
-
-#**************************************************************************************************************
-# NEW: Get list of changed IaC files for PR scans
-#**************************************************************************************************************
 
     - name: Get changed IaC files
       id: changed-files
@@ -42,72 +34,67 @@ jobs:
           # Get files changed in this PR
           git diff --name-only origin/${{ github.base_ref }}..HEAD > all_changed_files.txt
           
-          # Filter for IaC files (adjust extensions as needed for your use case)
-          grep -E '\.(tf|tfvars|yaml|yml|json|dockerfile|Dockerfile)$' all_changed_files.txt > iac_changed_files.txt || true
+          # Filter for IaC files but exclude .github directory
+          grep -E '\.(tf|tfvars|yaml|yml|json|dockerfile|Dockerfile)$' all_changed_files.txt | grep -v '^\.github/' > iac_changed_files.txt || true
           
           if [ -s iac_changed_files.txt ]; then
             echo "Changed IaC files found:"
             cat iac_changed_files.txt
             
-            # Create space-separated list for the scan
-            CHANGED_FILES=$(cat iac_changed_files.txt | tr '\n' ' ' | sed 's/[[:space:]]*$//')
-            echo "scan_path=$CHANGED_FILES" >> $GITHUB_OUTPUT
+            # Convert to JSON array for matrix strategy
+            FILES_JSON=$(jq -R -s -c 'split("\n")[:-1]' iac_changed_files.txt)
+            echo "files_matrix=$FILES_JSON" >> $GITHUB_OUTPUT
             echo "has_iac_changes=true" >> $GITHUB_OUTPUT
             echo "scan_mode=pr_changes" >> $GITHUB_OUTPUT
           else
-            echo "No IaC files changed in this PR"
+            echo "No IaC files changed in this PR (excluding workflow files)"
             echo "has_iac_changes=false" >> $GITHUB_OUTPUT
             echo "scan_mode=pr_changes" >> $GITHUB_OUTPUT
           fi
         else
           echo "Manual trigger - scanning entire repository"
-          echo "scan_path=." >> $GITHUB_OUTPUT
+          echo "files_matrix=[\".\"]" >> $GITHUB_OUTPUT
           echo "has_iac_changes=true" >> $GITHUB_OUTPUT
           echo "scan_mode=full_repo" >> $GITHUB_OUTPUT
         fi
 
-#**************************************************************************************************************
-# create directory where scan results will be stored
-#**************************************************************************************************************
-
     - name: Create output directory
       run: mkdir -p ./scan-results
 
-#**************************************************************************************************************
-# use the crowdstrike action to scan the current repo for iac files
-# NOW: Uses dynamic path based on trigger type and changed files
-# outputs results to ./scan-results with a timestamp in the filename
-#**************************************************************************************************************
-
-    - name: Run FCS IaC Scan
+    # Scan all changed files as a directory (simpler approach)
+    - name: Run FCS IaC Scan on changed files
       uses: crowdstrike/fcs-action@v1.1.0
       id: fcs
       if: steps.changed-files.outputs.has_iac_changes == 'true'
       with:
         falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
         falcon_region: 'us-1'
-        path: ${{ steps.changed-files.outputs.scan_path }}
+        # Scan current directory but only include the changed files
+        path: '.'
         report_formats: 'sarif'
         output_path: './scan-results'
-        # Add fail conditions for PR scans to actually fail the check
-        fail_on: ${{ github.event_name == 'pull_request' && 'critical=1,high=1' || '' }}
+        fail_on: ${{ github.event_name == 'pull_request' && 'critical=1,high=1' || 'critical=1,high=1,medium=1,informational=1' }}
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+
+    # Explicit check using the action's exit code output
+    - name: Check FCS scan results
+      if: always() && steps.changed-files.outputs.has_iac_changes == 'true' && github.event_name == 'pull_request'
+      run: |
+        echo "FCS scan exit code: ${{ steps.fcs.outputs.exit-code }}"
+        if [ "${{ steps.fcs.outputs.exit-code }}" != "0" ]; then
+          echo "::error::FCS scan found security issues that exceed the failure threshold"
+          echo "::error::Check the scan results above for details"
+          exit 1
+        else
+          echo "FCS scan passed - no issues above failure threshold"
+        fi
 
     - name: No IaC changes detected
       if: steps.changed-files.outputs.has_iac_changes == 'false'
       run: |
-        echo "::notice::No IaC files were changed in this PR. Skipping security scan."
+        echo "::notice::No IaC files were changed in this PR (excluding workflow files). Skipping security scan."
         echo "Scan mode: ${{ steps.changed-files.outputs.scan_mode }}"
-
-#**************************************************************************************************************
-# transform the sarif file to match github security requirements
-# - adds crowdstrike information uri
-# - converts severity levels:
-#   * critical/high -> error
-#   * medium -> warning
-#   * low/informational -> note
-#**************************************************************************************************************
 
     - name: Transform SARIF file
       if: always() && steps.changed-files.outputs.has_iac_changes == 'true'
@@ -128,19 +115,11 @@ jobs:
           echo "No SARIF file found to transform"
         fi
 
-#**************************************************************************************************************
-# upload the transformed sarif file to github security
-#**************************************************************************************************************
-
     - name: Upload SARIF report to GitHub Code scanning
       uses: github/codeql-action/upload-sarif@v3
       if: always() && hashFiles('scan-results.sarif') != ''
       with:
         sarif_file: scan-results.sarif
-
-#**************************************************************************************************************
-# Add summary of what was scanned
-#**************************************************************************************************************
 
     - name: Scan Summary
       if: always()
@@ -148,7 +127,7 @@ jobs:
         echo "## IaC Security Scan Summary" >> $GITHUB_STEP_SUMMARY
         echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Scan Mode**: ${{ steps.changed-files.outputs.scan_mode }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Path Scanned**: \`${{ steps.changed-files.outputs.scan_path }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
         
         if [ "${{ github.event_name }}" == "pull_request" ] && [ -f iac_changed_files.txt ]; then
           echo "- **Changed IaC Files**:" >> $GITHUB_STEP_SUMMARY
@@ -156,117 +135,3 @@ jobs:
             echo "  - $file" >> $GITHUB_STEP_SUMMARY
           done < iac_changed_files.txt
         fi
-
-#**************************************************************************************************************
-# ensure docker isn't running
-# build the image with podman
-# start the podman socket so our script can connect to it
-#**************************************************************************************************************
-
-    - name: Ensure docker is not running
-      run: |
-        sudo systemctl stop docker.service
-        sudo systemctl stop docker.socket
-
-    - name: Podman build
-      run: |
-        podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
-        systemctl --user enable --now podman.socket
-
-#**************************************************************************************************************
-# BETA TESTING - FCS CLI Image Assessment
-# This section uses the new FCS CLI tool for container scanning
-#**************************************************************************************************************
-
-    - name: Configure AWS credentials for FCS CLI
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_FCS }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
-        aws-region: us-west-2
-
-    - name: Download FCS CLI
-      run: |
-        aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
-        chmod +x /usr/local/bin/fcs
-
-    - name: Configure FCS CLI
-      env:
-        FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
-        FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
-        FCS_FALCON_REGION: "us-1"
-      run: |
-        fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
-   
-    - name: Run FCS CLI
-      run: |
-        fcs scan image ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
-
-#**************************************************************************************************************
-# the following section demonstrates how to use the crowdstrike action to assess images
-# navigate to the action directly to read more details
-#**************************************************************************************************************
-
-    # - name: Scan Container Image with CrowdStrike action          
-    #   continue-on-error: true
-    #   uses: CrowdStrike/container-image-scan-action@main
-    #   with:
-    #     container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
-    #     container_tag: ${{ env.ECR_TAG }}
-    #     crowdstrike_region: us-1
-    #     crowdstrike_score: 500000
-    #     retry_count: 30
-    #   env:
-    #     JSON_REPORT: /tmp/report.json
-  
-    # - name: Print CrowdStrike Full Image Scan Report
-    #   continue-on-error: true
-    #   if: always()
-    #   run: |
-    #     jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
-
-#**************************************************************************************************************
-# the following section demonstrates how to use the python script to assess images
-# the action above uses this script under the hood
-# navigate to crowdstrike/container-image-scan to read more
-# using the action is the recommended approach
-#**************************************************************************************************************
-
-    # - name: Scan images via CrowdStrike script
-    #   continue-on-error: true
-    #   run: |
-    #     wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
-    #     pip3 install podman crowdstrike-falconpy retry
-    #     python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1 --json-report /tmp/report.json
-    #     jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
-
-# **************************************************************************************************************
-# the following section demonstrates how to manually upload images
-# to the crowdstrike assessment service and retreive results
-# this is an alternative approach to the crowdstrike action and python script
-# using the action is the recommended approach
-# **************************************************************************************************************
-
-    # - name: Tag and push the image to CrowdStrike image assessment service
-    #   run: |    
-    #     podman login \
-    #     --username ${FALCON_CLIENT_ID} \
-    #     --password ${FALCON_CLIENT_SECRET} \
-    #     container-upload.us-1.crowdstrike.com
-
-    #     podman tag ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
-    #     podman push container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
-
-    # - name: Retreive vulnerability report
-    #   run: |
-    #     RESPONSE=$(curl \
-    #     --header "Content-Type: application/x-www-form-urlencoded" \
-    #     --data "client_id=${FALCON_CLIENT_ID}&client_secret=${FALCON_CLIENT_SECRET}" \
-    #     --request POST \
-    #     --silent https://api.crowdstrike.com/oauth2/token) 
-
-    #     CS_JWT=$(echo ${RESPONSE} | jq -r '.access_token')
-
-    #     curl \
-    #     --header "Authorization: Bearer ${CS_JWT}" \
-    #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
