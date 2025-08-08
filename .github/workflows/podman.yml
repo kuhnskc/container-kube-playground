@@ -56,7 +56,7 @@ jobs:
     - name: Create output directory
       run: mkdir -p ./scan-results
 
-    - name: Run FCS IaC Scan on changed files
+    - name: Run FCS IaC Scan
       uses: crowdstrike/fcs-action@v1.1.0
       id: fcs
       if: steps.changed-files.outputs.has_changes == 'true'
@@ -122,70 +122,13 @@ jobs:
       with:
         sarif_file: scan-results.sarif
 
-#**************************************************************************************************************
-# ensure docker isn't running
-# build the image with podman
-# start the podman socket so our script can connect to it
-#**************************************************************************************************************
-
-    - name: Ensure docker is not running
-      run: |
-        sudo systemctl stop docker.service
-        sudo systemctl stop docker.socket
-
-    - name: Podman build
-      run: |
-        podman build --platform linux/amd64 -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
-        systemctl --user enable --now podman.socket
-
-#**************************************************************************************************************
-# BETA TESTING - FCS CLI Image Assessment
-# This section uses the new FCS CLI tool for container scanning
-#**************************************************************************************************************
-
-    - name: Configure AWS credentials for FCS CLI
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_FCS }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
-        aws-region: us-west-2
-
-    - name: Download and Update FCS CLI
-      run: |
-        echo "Downloading FCS CLI from S3..."
-        aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
-        chmod +x /usr/local/bin/fcs
-        
-        echo "Current FCS CLI version:"
-        fcs version || echo "Could not get version"
-        
-        echo "Updating FCS CLI to latest version..."
-        fcs update || echo "Update failed or not needed"
-        
-        echo "Updated FCS CLI version:"
-        fcs version || echo "Could not get version after update"
-
-    - name: Configure FCS CLI
-      env:
-        FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
-        FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
-        FCS_FALCON_REGION: "us-1"
-      run: |
-        fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
-   
-    - name: Run FCS CLI Image Scan
-      run: |
-        echo "Scanning container image with platform specification..."
-        fcs scan image --platform linux/amd64 ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
-
     - name: Scan Summary
       if: always()
       run: |
-        echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+        echo "## IaC Security Scan Summary" >> $GITHUB_STEP_SUMMARY
         echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Scan Mode**: ${{ steps.changed-files.outputs.scan_mode }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **IaC FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Container Platform**: linux/amd64" >> $GITHUB_STEP_SUMMARY
+        echo "- **FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
         
         if [ "${{ github.event_name }}" == "pull_request" ] && [ -f changed_files.txt ]; then
           echo "- **Changed Files (FCS will filter for IaC)**:" >> $GITHUB_STEP_SUMMARY
@@ -193,3 +136,52 @@ jobs:
             echo "  - $file" >> $GITHUB_STEP_SUMMARY
           done < changed_files.txt
         fi
+
+#**************************************************************************************************************
+# COMMENTED OUT - Container scanning sections until we can get FCS CLI image assessment working
+#**************************************************************************************************************
+
+    # - name: Ensure docker is not running
+    #   run: |
+    #     sudo systemctl stop docker.service
+    #     sudo systemctl stop docker.socket
+
+    # - name: Podman build
+    #   run: |
+    #     podman build --platform linux/amd64 -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
+    #     systemctl --user enable --now podman.socket
+
+    # - name: Configure AWS credentials for FCS CLI
+    #   uses: aws-actions/configure-aws-credentials@v4
+    #   with:
+    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_FCS }}
+    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
+    #     aws-region: us-west-2
+
+    # - name: Download and Update FCS CLI
+    #   run: |
+    #     echo "Downloading FCS CLI from S3..."
+    #     aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
+    #     chmod +x /usr/local/bin/fcs
+    #     
+    #     echo "Current FCS CLI version:"
+    #     fcs version || echo "Could not get version"
+    #     
+    #     echo "Updating FCS CLI to latest version..."
+    #     fcs update || echo "Update failed or not needed"
+    #     
+    #     echo "Updated FCS CLI version:"
+    #     fcs version || echo "Could not get version after update"
+
+    # - name: Configure FCS CLI
+    #   env:
+    #     FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+    #     FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+    #     FCS_FALCON_REGION: "us-1"
+    #   run: |
+    #     fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
+   
+    # - name: Run FCS CLI Image Scan
+    #   run: |
+    #     echo "Scanning container image..."
+    #     fcs scan image ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} --platform linux/amd64 --upload
