@@ -2,7 +2,7 @@ name: actions-jobs
 on: 
   workflow_dispatch:
   pull_request:
-    branches: [ "main", "master" ]  # Added PR trigger
+    branches: [ "main", "master" ]
 
 #**************************************************************************************************************
 # define environment variables used throughout the workflow
@@ -30,7 +30,7 @@ jobs:
         fetch-depth: 0
 
 #**************************************************************************************************************
-# NEW: Get list of changed IaC files for PR scans
+# Get list of changed IaC files for PR scans
 #**************************************************************************************************************
 
     - name: Get changed IaC files
@@ -75,7 +75,6 @@ jobs:
 
 #**************************************************************************************************************
 # use the crowdstrike action to scan the current repo for iac files
-# NOW: Uses dynamic path based on trigger type and changed files
 # outputs results to ./scan-results with a timestamp in the filename
 #**************************************************************************************************************
 
@@ -89,7 +88,6 @@ jobs:
         path: ${{ steps.changed-files.outputs.scan_path }}
         report_formats: 'sarif'
         output_path: './scan-results'
-        # Add fail conditions for PR scans to actually fail the check
         fail_on: ${{ github.event_name == 'pull_request' && 'critical=1,high=1' || '' }}
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
@@ -102,11 +100,6 @@ jobs:
 
 #**************************************************************************************************************
 # transform the sarif file to match github security requirements
-# - adds crowdstrike information uri
-# - converts severity levels:
-#   * critical/high -> error
-#   * medium -> warning
-#   * low/informational -> note
 #**************************************************************************************************************
 
     - name: Transform SARIF file
@@ -158,115 +151,39 @@ jobs:
         fi
 
 #**************************************************************************************************************
-# ensure docker isn't running
-# build the image with podman
-# start the podman socket so our script can connect to it
+# COMMENTED OUT - Container scanning sections for testing IaC-only workflow
 #**************************************************************************************************************
 
-    - name: Ensure docker is not running
-      run: |
-        sudo systemctl stop docker.service
-        sudo systemctl stop docker.socket
+    # - name: Ensure docker is not running
+    #   run: |
+    #     sudo systemctl stop docker.service
+    #     sudo systemctl stop docker.socket
 
-    - name: Podman build
-      run: |
-        podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
-        systemctl --user enable --now podman.socket
+    # - name: Podman build
+    #   run: |
+    #     podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
+    #     systemctl --user enable --now podman.socket
 
-#**************************************************************************************************************
-# BETA TESTING - FCS CLI Image Assessment
-# This section uses the new FCS CLI tool for container scanning
-#**************************************************************************************************************
-
-    - name: Configure AWS credentials for FCS CLI
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_FCS }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
-        aws-region: us-west-2
-
-    - name: Download FCS CLI
-      run: |
-        aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
-        chmod +x /usr/local/bin/fcs
-
-    - name: Configure FCS CLI
-      env:
-        FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
-        FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
-        FCS_FALCON_REGION: "us-1"
-      run: |
-        fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
-   
-    - name: Run FCS CLI
-      run: |
-        fcs scan image ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
-
-#**************************************************************************************************************
-# the following section demonstrates how to use the crowdstrike action to assess images
-# navigate to the action directly to read more details
-#**************************************************************************************************************
-
-    # - name: Scan Container Image with CrowdStrike action          
-    #   continue-on-error: true
-    #   uses: CrowdStrike/container-image-scan-action@main
+    # - name: Configure AWS credentials for FCS CLI
+    #   uses: aws-actions/configure-aws-credentials@v4
     #   with:
-    #     container_repository: ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}
-    #     container_tag: ${{ env.ECR_TAG }}
-    #     crowdstrike_region: us-1
-    #     crowdstrike_score: 500000
-    #     retry_count: 30
+    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_FCS }}
+    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
+    #     aws-region: us-west-2
+
+    # - name: Download FCS CLI
+    #   run: |
+    #     aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
+    #     chmod +x /usr/local/bin/fcs
+
+    # - name: Configure FCS CLI
     #   env:
-    #     JSON_REPORT: /tmp/report.json
-  
-    # - name: Print CrowdStrike Full Image Scan Report
-    #   continue-on-error: true
-    #   if: always()
+    #     FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+    #     FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+    #     FCS_FALCON_REGION: "us-1"
     #   run: |
-    #     jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
-
-#**************************************************************************************************************
-# the following section demonstrates how to use the python script to assess images
-# the action above uses this script under the hood
-# navigate to crowdstrike/container-image-scan to read more
-# using the action is the recommended approach
-#**************************************************************************************************************
-
-    # - name: Scan images via CrowdStrike script
-    #   continue-on-error: true
+    #     fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
+   
+    # - name: Run FCS CLI
     #   run: |
-    #     wget https://raw.githubusercontent.com/CrowdStrike/container-image-scan/refs/heads/main/cs_scanimage.py
-    #     pip3 install podman crowdstrike-falconpy retry
-    #     python3 cs_scanimage.py --repo ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }} --tag ${{ env.ECR_TAG }} --cloud-region us-1 --json-report /tmp/report.json
-    #     jq '.' /tmp/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}.json
-
-# **************************************************************************************************************
-# the following section demonstrates how to manually upload images
-# to the crowdstrike assessment service and retreive results
-# this is an alternative approach to the crowdstrike action and python script
-# using the action is the recommended approach
-# **************************************************************************************************************
-
-    # - name: Tag and push the image to CrowdStrike image assessment service
-    #   run: |    
-    #     podman login \
-    #     --username ${FALCON_CLIENT_ID} \
-    #     --password ${FALCON_CLIENT_SECRET} \
-    #     container-upload.us-1.crowdstrike.com
-
-    #     podman tag ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
-    #     podman push container-upload.us-1.crowdstrike.com/${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
-
-    # - name: Retreive vulnerability report
-    #   run: |
-    #     RESPONSE=$(curl \
-    #     --header "Content-Type: application/x-www-form-urlencoded" \
-    #     --data "client_id=${FALCON_CLIENT_ID}&client_secret=${FALCON_CLIENT_SECRET}" \
-    #     --request POST \
-    #     --silent https://api.crowdstrike.com/oauth2/token) 
-
-    #     CS_JWT=$(echo ${RESPONSE} | jq -r '.access_token')
-
-    #     curl \
-    #     --header "Authorization: Bearer ${CS_JWT}" \
-    #     --request GET "https://container-upload.us-1.crowdstrike.com/reports?repository=${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}&tag=${{ env.ECR_TAG }}"
+    #     fcs scan image ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
