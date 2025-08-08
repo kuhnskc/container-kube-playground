@@ -110,3 +110,5 @@ spec:
         env:
         - name: SECRET_KEY
           value: "hardcoded-secret-123"  # Hardcoded secret
+
+# Test change - Fri Aug  8 10:00:11 MDT 2025
