@@ -122,13 +122,58 @@ jobs:
       with:
         sarif_file: scan-results.sarif
 
+#**************************************************************************************************************
+# ensure docker isn't running
+# build the image with podman
+# start the podman socket so our script can connect to it
+#**************************************************************************************************************
+
+    - name: Ensure docker is not running
+      run: |
+        sudo systemctl stop docker.service
+        sudo systemctl stop docker.socket
+
+    - name: Podman build
+      run: |
+        podman build -t ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }} .
+        systemctl --user enable --now podman.socket
+
+#**************************************************************************************************************
+# BETA TESTING - FCS CLI Image Assessment
+# This section uses the new FCS CLI tool for container scanning
+#**************************************************************************************************************
+
+    - name: Configure AWS credentials for FCS CLI
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_FCS }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_FCS }}
+        aws-region: us-west-2
+
+    - name: Download FCS CLI
+      run: |
+        aws s3 cp s3://fcs-cli-beta-testing-kc/fcs /usr/local/bin/fcs
+        chmod +x /usr/local/bin/fcs
+
+    - name: Configure FCS CLI
+      env:
+        FCS_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+        FCS_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+        FCS_FALCON_REGION: "us-1"
+      run: |
+        fcs configure --client-id "$FCS_CLIENT_ID" --client-secret "$FCS_CLIENT_SECRET" --falcon-region "$FCS_FALCON_REGION"
+   
+    - name: Run FCS CLI
+      run: |
+        fcs scan image ${{ secrets.AWS_ACCOUNT_ID}}.dkr.ecr.us-east-2.amazonaws.com/${{ env.ECR_REPO }}:${{ env.ECR_TAG }}
+
     - name: Scan Summary
       if: always()
       run: |
-        echo "## IaC Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+        echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
         echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Scan Mode**: ${{ steps.changed-files.outputs.scan_mode }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **IaC FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
         
         if [ "${{ github.event_name }}" == "pull_request" ] && [ -f changed_files.txt ]; then
           echo "- **Changed Files (FCS will filter for IaC)**:" >> $GITHUB_STEP_SUMMARY
