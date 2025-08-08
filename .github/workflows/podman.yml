@@ -25,31 +25,31 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Get changed IaC files
+    - name: Get changed files
       id: changed-files
       run: |
         if [ "${{ github.event_name }}" == "pull_request" ]; then
           echo "This is a PR - scanning only changed files"
           
-          # Get files changed in this PR
+          # Get ALL files changed in this PR (no filtering)
           git diff --name-only origin/${{ github.base_ref }}..HEAD > all_changed_files.txt
           
-          # Filter for IaC files but exclude .github directory
-          grep -E '\.(tf|tfvars|yaml|yml|json|dockerfile|Dockerfile)$' all_changed_files.txt | grep -v '^\.github/' > iac_changed_files.txt || true
+          # Exclude only .github workflow files (we don't want to scan those)
+          grep -v '^\.github/' all_changed_files.txt > changed_files.txt || true
           
-          if [ -s iac_changed_files.txt ]; then
-            echo "Changed IaC files found:"
-            cat iac_changed_files.txt
-            echo "has_iac_changes=true" >> $GITHUB_OUTPUT
+          if [ -s changed_files.txt ]; then
+            echo "Changed files found (FCS will determine which are IaC):"
+            cat changed_files.txt
+            echo "has_changes=true" >> $GITHUB_OUTPUT
             echo "scan_mode=pr_changes" >> $GITHUB_OUTPUT
           else
-            echo "No IaC files changed in this PR (excluding workflow files)"
-            echo "has_iac_changes=false" >> $GITHUB_OUTPUT
+            echo "No files changed in this PR (excluding workflow files)"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
             echo "scan_mode=pr_changes" >> $GITHUB_OUTPUT
           fi
         else
           echo "Manual trigger - scanning entire repository"
-          echo "has_iac_changes=true" >> $GITHUB_OUTPUT
+          echo "has_changes=true" >> $GITHUB_OUTPUT
           echo "scan_mode=full_repo" >> $GITHUB_OUTPUT
         fi
 
@@ -59,29 +59,23 @@ jobs:
     - name: Run FCS IaC Scan on changed files
       uses: crowdstrike/fcs-action@v1.1.0
       id: fcs
-      if: steps.changed-files.outputs.has_iac_changes == 'true'
+      if: steps.changed-files.outputs.has_changes == 'true'
       with:
         falcon_client_id: ${{ secrets.FALCON_CLIENT_ID }}
         falcon_region: 'us-1'
         path: '.'
         report_formats: 'sarif'
         output_path: './scan-results'
-        # Only fail on critical and high, allow medium/low to pass
         fail_on: 'critical=1,high=1'
-        # Explicitly exclude medium and lower from causing failures
-        exclude_severities: ''
       env:
         FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
 
-    # More intelligent check - only fail on actual critical/high issues
     - name: Check FCS scan results
-      if: always() && steps.changed-files.outputs.has_iac_changes == 'true' && github.event_name == 'pull_request'
+      if: always() && steps.changed-files.outputs.has_changes == 'true' && github.event_name == 'pull_request'
       run: |
         echo "FCS scan exit code: ${{ steps.fcs.outputs.exit-code }}"
         
-        # Parse the actual scan results to count critical/high issues
         if [ -f "./scan-results/"*"-scan-results.sarif" ]; then
-          # Check if there are any critical or high severity findings
           CRITICAL_HIGH_COUNT=$(jq '[.runs[].results[] | select(.level == "error")] | length' ./scan-results/*-scan-results.sarif 2>/dev/null || echo "0")
           
           echo "Critical/High severity findings: $CRITICAL_HIGH_COUNT"
@@ -95,17 +89,16 @@ jobs:
           fi
         else
           echo "::warning::No scan results file found, but exit code was ${{ steps.fcs.outputs.exit-code }}"
-          # Don't fail if we can't parse results but no critical/high were reported in summary
         fi
 
-    - name: No IaC changes detected
-      if: steps.changed-files.outputs.has_iac_changes == 'false'
+    - name: No changes detected
+      if: steps.changed-files.outputs.has_changes == 'false'
       run: |
-        echo "::notice::No IaC files were changed in this PR (excluding workflow files). Skipping security scan."
+        echo "::notice::No files were changed in this PR (excluding workflow files). Skipping security scan."
         echo "Scan mode: ${{ steps.changed-files.outputs.scan_mode }}"
 
     - name: Transform SARIF file
-      if: always() && steps.changed-files.outputs.has_iac_changes == 'true'
+      if: always() && steps.changed-files.outputs.has_changes == 'true'
       run: |
         if ls ./scan-results/*-scan-results.sarif 1> /dev/null 2>&1; then
           cp ./scan-results/*-scan-results.sarif original.sarif
@@ -137,9 +130,9 @@ jobs:
         echo "- **Scan Mode**: ${{ steps.changed-files.outputs.scan_mode }}" >> $GITHUB_STEP_SUMMARY
         echo "- **FCS Exit Code**: ${{ steps.fcs.outputs.exit-code }}" >> $GITHUB_STEP_SUMMARY
         
-        if [ "${{ github.event_name }}" == "pull_request" ] && [ -f iac_changed_files.txt ]; then
-          echo "- **Changed IaC Files**:" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ github.event_name }}" == "pull_request" ] && [ -f changed_files.txt ]; then
+          echo "- **Changed Files (FCS will filter for IaC)**:" >> $GITHUB_STEP_SUMMARY
           while read -r file; do
             echo "  - $file" >> $GITHUB_STEP_SUMMARY
-          done < iac_changed_files.txt
+          done < changed_files.txt
         fi
