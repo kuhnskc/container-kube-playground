@@ -34,3 +34,30 @@ spec:
         hostPath:
           path: /               # Critical: Host root filesystem mount
           type: Directory
+
+---
+# Adding another insecure deployment to trigger scan failure
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-test-privileged
+  namespace: demo-secure-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-privileged
+  template:
+    metadata:
+      labels:
+        app: test-privileged
+    spec:
+      containers:
+      - name: privileged-container
+        image: nginx:latest
+        securityContext:
+          privileged: true        # This will trigger high/critical finding
+          runAsUser: 0           # This will also trigger findings
+        env:
+        - name: SECRET_TOKEN
+          value: "hardcoded-secret-123"  # Another security issue
